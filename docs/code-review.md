@@ -51,6 +51,7 @@ a test, and most of those tests fail on the old code.
 | Finding | Fix |
 | --- | --- |
 | Clicking a Qi quest's name or description accepted or cancelled it: the row was a `<label>` whose first control was that button. | The row is a `<div>`, and the checkbox is named after the quest. |
+| Completed or failed Qi orders showed "In Progress" with a Cancel button that did nothing. (The verifiers split: both found the bug real, but one judged the proposed fix, counting only in-progress orders as taken, harmful.) | Fixed after the review the safer way: the order still counts as taken, so it can't be made active or offered again, but its tag shows "Complete" or "Failed" and Cancel is only offered for an order in progress. |
 | Typing friendship points re-sorted the Relationships list and dropped focus. | The list only re-sorts when villagers are added or the farmer changes. |
 | A corrupt compressed save left the upload page stuck on "Uploading...". | The error shows in a toast and the upload button works again. |
 | Item slots had no accessible name. | Each slot is labelled with its item (chest slots and the item editor's large icon too). |
@@ -79,7 +80,6 @@ The comment on `toEventId` in `src/lib/proxies/EventsSeen.svelte.ts` was correct
 | Finding | Why |
 | --- | --- |
 | The `tests` and `quality` checks aren't required before merging. | A GitHub ruleset setting, not something a commit can change. See follow-ups. |
-| Completed or failed Qi orders show "In Progress" with a Cancel button that does nothing. (The verifiers split: both found the bug real, but one judged the proposed fix harmful.) | The proposed fix, counting only in-progress orders as taken, would let "Make Active" add a second order with the same key next to the unclaimed one, and let the board offer it again. As far as the verifiers recall (it wasn't checked against the game's code), the game never offers a quest that's already in the save's orders. Nothing is corrupted today, so it's low severity. See follow-ups. |
 
 ### Examined and judged not a problem
 
@@ -97,8 +97,6 @@ The comment on `toEventId` in `src/lib/proxies/EventsSeen.svelte.ts` was correct
 
 - **Required checks (repository owner):** add `tests` and `quality` as required status checks to the
   `01-default-branch-protection` ruleset in the repository settings.
-- **Qi orders:** keep a Complete or Failed order's key blocked, but show its state ("Complete" or
-  "Failed") instead of "In Progress", and only offer Cancel for one that's in progress.
 - **Number-like text:** "1.50" and "+7" still change on export, and a name that's only digits, such
   as "7", still loads as a number, so the duplicate animal name check on the Buildings page misses it.
 - **Action versions:** move the workflows to the Node.js 24 majors (`actions/checkout` and
