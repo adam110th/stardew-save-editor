@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { asset } from "$app/paths";
+	import { LovedGifts } from "$lib/LovedGifts";
 	import type { Friendship } from "$lib/proxies/Friendship.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import EmojiRange from "$lib/ui/EmojiRange.svelte";
 	import UiContainerSmall from "$lib/ui/UIContainerSmall.svelte";
 	import UiInput from "$lib/ui/UIInput.svelte";
 	import { Villagers } from "$lib/Villagers";
+	import type { LovedGift } from "$types/giftTastes";
 	import ItemSprite from "../inventory/ItemSprite.svelte";
 
 	interface Props {
@@ -16,6 +18,8 @@
 	let { npc, name }: Props = $props();
 
 	const info = $derived(Villagers.get(name));
+	const loves = $derived(LovedGifts.get(name)?.loves ?? []);
+	const universalLoves = $derived(LovedGifts.get(name)?.universalLoves ?? []);
 	const portrait = $derived(asset(`/assets/portraits/${name}.png`));
 
 	// Portrait sheets are a grid of 64px frames; scale the sheet so one frame fills the box
@@ -34,6 +38,21 @@
 		image.src = portrait;
 	});
 </script>
+
+{#snippet giftIcon(gift: LovedGift, testId: string)}
+	<div
+		role="img"
+		aria-label={gift.name}
+		title={gift.items ? `${gift.name}: ${gift.items.join(", ")}` : gift.name}
+		data-testid={testId}
+	>
+		<ItemSprite item={Item.fromName(gift.item)} />
+	</div>
+	{#if gift.items}
+		<!-- A whole category, such as every book: say so next to the icon -->
+		<small class="group" aria-hidden="true">{gift.name}</small>
+	{/if}
+{/snippet}
 
 <div class="row" data-testid="friendship-row">
 	<UiContainerSmall>
@@ -97,14 +116,30 @@
 			onInputChange={(value) => (npc.points = value)}
 		/>
 
-		{#if info?.loves.length}
-			<ul class="loves" aria-label={`${name}'s loved gifts`}>
-				{#each info.loves as gift (gift.item)}
-					<li title={`Loves: ${gift.name}`} data-testid="friendship-loved-gift">
-						<ItemSprite item={Item.fromName(gift.item)} />
-					</li>
-				{/each}
-			</ul>
+		{#if loves.length > 0 || universalLoves.length > 0}
+			<div class="loves">
+				{#if loves.length > 0}
+					<ul aria-label={`${name}'s loved gifts`}>
+						{#each loves as gift (gift.name)}
+							<li>{@render giftIcon(gift, "friendship-loved-gift")}</li>
+						{/each}
+					</ul>
+				{/if}
+				{#if universalLoves.length > 0}
+					<!-- Universal loves that this villager doesn't override -->
+					<div
+						class="universal"
+						title="Universal loves: gifts almost every villager loves"
+					>
+						<small aria-hidden="true">Universal loves</small>
+						<ul aria-label={`${name}'s universal loves`}>
+							{#each universalLoves as gift (gift.name)}
+								<li>{@render giftIcon(gift, "friendship-universal-love")}</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </div>
@@ -181,14 +216,44 @@
 		opacity: 0.8;
 	}
 
-	.loves {
+	.loves,
+	.loves ul,
+	.loves li,
+	.universal {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: 2px;
+	}
+
+	.loves {
+		column-gap: 8px;
+	}
+
+	.loves ul {
 		margin: 0;
 		padding: 0;
 		list-style: none;
-		/* Shrink the 32px item sprites to small icons */
+	}
+
+	/* Shrink the 32px item sprites to small icons */
+	.loves [role="img"] {
 		zoom: 0.75;
+	}
+
+	.loves small {
+		font-size: 0.7em;
+		opacity: 0.8;
+	}
+
+	.group {
+		margin-right: 4px;
+	}
+
+	/* Set the universal loves apart from the villager's own */
+	.universal {
+		gap: 4px;
+		padding-left: 8px;
+		border-left: 2px solid #da9457;
 	}
 </style>

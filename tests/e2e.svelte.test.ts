@@ -968,7 +968,7 @@ describe("Save Manager Integration Tests", () => {
 			);
 		});
 
-		it("shows each villager's description and loved gifts", () => {
+		it("shows each villager's description", () => {
 			const page = harness.render(relationshipsPage);
 			const row = page
 				.getAllByTestId("friendship-row")
@@ -981,10 +981,78 @@ describe("Save Manager Integration Tests", () => {
 			expect(
 				within(row).getByTestId("friendship-description").textContent,
 			).toMatch(/^Lewis is/);
-			const gifts = within(row).getAllByTestId("friendship-loved-gift");
-			expect(gifts.map((g) => g.getAttribute("title"))).toContain(
-				"Loves: Autumn's Bounty",
+		});
+
+		it("shows each villager's own and universal loves as item icons", () => {
+			const page = harness.render(relationshipsPage);
+			const rowFor = (name: string) => {
+				const row = page
+					.getAllByTestId("friendship-row")
+					.find(
+						(r) =>
+							within(r).getByTestId("friendship-name").textContent === name,
+					);
+				if (!row) throw new Error(`No row for ${name}`);
+				return row;
+			};
+			const labels = (icons: HTMLElement[]) =>
+				icons.map((icon) => icon.getAttribute("aria-label"));
+
+			const lewis = rowFor("Lewis");
+			const gifts = within(lewis).getAllByTestId("friendship-loved-gift");
+			expect(labels(gifts)).toEqual([
+				"Autumn's Bounty",
+				"Glazed Yams",
+				"Green Tea",
+				"Hot Pepper",
+				"Vegetable Medley",
+			]);
+			const universal = within(lewis).getAllByTestId(
+				"friendship-universal-love",
 			);
+			expect(labels(universal)).toEqual([
+				"Golden Pumpkin",
+				"Magic Rock Candy",
+				"Pearl",
+				"Prismatic Shard",
+				"Rabbit's Foot",
+				"Stardrop Tea",
+			]);
+			for (const gift of [...gifts, ...universal]) {
+				expect(gift.getAttribute("role")).toBe("img");
+				expect(gift.getAttribute("title")).toBe(
+					gift.getAttribute("aria-label"),
+				);
+				// A drawn sprite, not the "??" placeholder
+				expect(gift.querySelector("svg image")).toBeTruthy();
+			}
+			// Two lists, with the universal loves after the villager's own
+			const own = within(lewis).getByRole("list", {
+				name: "Lewis's loved gifts",
+			});
+			const shared = within(lewis).getByRole("list", {
+				name: "Lewis's universal loves",
+			});
+			expect(within(own).getAllByRole("img")).toEqual(gifts);
+			expect(within(shared).getAllByRole("img")).toEqual(universal);
+			expect(
+				own.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+			expect(within(lewis).getByText("Universal loves")).toBeTruthy();
+
+			// Haley hates Prismatic Shard, so it isn't one of her universal loves;
+			// Stardrop Tea is, as nobody can override it
+			expect(
+				labels(
+					within(rowFor("Haley")).getAllByTestId("friendship-universal-love"),
+				),
+			).toEqual([
+				"Golden Pumpkin",
+				"Magic Rock Candy",
+				"Pearl",
+				"Rabbit's Foot",
+				"Stardrop Tea",
+			]);
 		});
 
 		it("should update friendship hearts", async () => {
@@ -1421,7 +1489,7 @@ describe("Save Manager Integration Tests", () => {
 	});
 
 	describe("Relationships search", () => {
-		it("filters villagers by name or loved gift", async () => {
+		it("filters villagers by name or description", async () => {
 			const page = harness.render(relationshipsPage);
 			const names = () =>
 				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
@@ -1429,7 +1497,14 @@ describe("Save Manager Integration Tests", () => {
 			expect(all).toBeGreaterThan(2);
 
 			const search = page.getByTestId("relationships-search");
-			await fireEvent.input(search, { target: { value: "lew" } });
+			// Case-insensitive, ignoring surrounding whitespace
+			await fireEvent.input(search, { target: { value: "  lEW " } });
+			expect(names()).toEqual(["Lewis"]);
+			// The encountered count still reflects every villager
+			expect(page.getByText(`NPCs encountered: ${all}`)).toBeTruthy();
+
+			// "mayor" is only in Lewis's description
+			await fireEvent.input(search, { target: { value: "Mayor" } });
 			expect(names()).toEqual(["Lewis"]);
 
 			await fireEvent.input(search, { target: { value: "zzzz" } });
@@ -1438,6 +1513,92 @@ describe("Save Manager Integration Tests", () => {
 
 			await fireEvent.input(search, { target: { value: "" } });
 			expect(names()).toHaveLength(all);
+		});
+
+		it("filters villagers by loved gift", async () => {
+			const page = harness.render(relationshipsPage);
+			const names = () =>
+				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
+			const all = names();
+
+			const search = page.getByTestId("relationships-search");
+			expect(search.getAttribute("placeholder")).toBe(
+				"Search villagers or loved gifts...",
+			);
+
+			await fireEvent.input(search, { target: { value: " DIAMOND  " } });
+			expect(names().sort()).toEqual([
+				"Evelyn",
+				"Jodi",
+				"Marnie",
+				"Maru",
+				"Willy",
+			]);
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(within(row).getByRole("img", { name: "Diamond" })).toBeTruthy();
+			}
+
+			// Part of a gift name works too
+			await fireEvent.input(search, { target: { value: "pink ca" } });
+			expect(names().sort()).toEqual(["Haley", "Jas", "Marnie"]);
+
+			await fireEvent.input(search, { target: { value: "" } });
+			expect(names()).toEqual(all);
+		});
+
+		it("filters villagers by universal loves, minus their overrides", async () => {
+			const page = harness.render(relationshipsPage);
+			const names = () =>
+				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
+			const all = names();
+			expect(all).toContain("Haley");
+			const search = page.getByTestId("relationships-search");
+			const universalLabels = (row: HTMLElement) =>
+				within(row)
+					.getAllByTestId("friendship-universal-love")
+					.map((icon) => icon.getAttribute("aria-label"));
+
+			// Everyone loves Prismatic Shard, except Haley, who hates it
+			await fireEvent.input(search, { target: { value: "Prismatic" } });
+			expect(names()).toEqual(all.filter((name) => name !== "Haley"));
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(universalLabels(row)).toContain("Prismatic Shard");
+			}
+
+			// Nobody can override Stardrop Tea, so it lists everyone
+			await fireEvent.input(search, { target: { value: "stardrop tea" } });
+			expect(names()).toEqual(all);
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(universalLabels(row)).toContain("Stardrop Tea");
+			}
+
+			// With every villager met: everyone loves Rabbit's Foot but Penny
+			await fireEvent.click(page.getByTestId("add-missing-friendships"));
+			await tick();
+			await fireEvent.input(search, { target: { value: "rabbit's foot" } });
+			expect(names().sort()).toEqual(
+				characters.filter((name) => name !== "Penny").sort(),
+			);
+
+			// Penny loves every book, shown once as "Any book"
+			await fireEvent.input(search, {
+				target: { value: "monster compendium" },
+			});
+			expect(names().sort()).toEqual(["Abigail", "Krobus", "Penny"]);
+			const penny = page
+				.getAllByTestId("friendship-row")
+				.find(
+					(row) =>
+						within(row).getByTestId("friendship-name").textContent === "Penny",
+				);
+			if (!penny) throw new Error("No row for Penny");
+			const books = within(penny).getByRole("img", { name: "Any book" });
+			expect(books.getAttribute("title")).toMatch(
+				/^Any book: .*Monster Compendium/,
+			);
+
+			await fireEvent.input(search, { target: { value: "" } });
+			expect(names()).toHaveLength(characters.length);
 		});
 	});
 

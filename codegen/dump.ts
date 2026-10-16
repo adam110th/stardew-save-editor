@@ -29,6 +29,7 @@ import {
 	type BuildingUpgradeSource,
 	getBuildingUpgradeData,
 } from "./buildingUpgrade.js";
+import { type ItemInfo, villagerGifts } from "./giftTastes.js";
 import {
 	createArtisanGoods,
 	fixTexture,
@@ -308,6 +309,23 @@ const writeToFile = JSON.stringify(
 // Overwrite rather than clear the folder: villagers.json comes from `npm run dump:villagers`
 await mkdir("./generated", { recursive: true });
 await writeFile("./generated/iteminfo.json", writeToFile);
+
+// **Gift tastes**
+
+// Each villager's loved gifts, worked out from Data/NPCGiftTastes the way the
+// game does (see giftTastes.ts) for every giftable item written above
+const giftTastes = JSON.parse(
+	await readFile("./content/Data/NPCGiftTastes.json", "utf-8"),
+) as Record<string, string>;
+const { villagers: lovedGifts, unmatched } = villagerGifts(
+	giftTastes,
+	JSON.parse(writeToFile) as [string, ItemInfo][],
+	characters,
+);
+if (unmatched.length > 0) {
+	console.warn(`No giftable item for loved gifts: ${unmatched.join(", ")}`);
+}
+await writeFile("./generated/gifttastes.json", JSON.stringify(lovedGifts));
 
 // **Recipes**
 

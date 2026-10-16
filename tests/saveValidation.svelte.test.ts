@@ -222,16 +222,13 @@ describe("validateSave", () => {
 		["day 29", { dayOfMonth: 29 }, "The day of the month (29) isn't 1 to 28"],
 		["day 0", { dayOfMonth: 0 }, "The day of the month (0) isn't 1 to 28"],
 		["year 0", { year: 0 }, "The year (0) is less than 1"],
-	])(
-		"warns about %s, a date the game never makes",
-		async (_, date, message) => {
-			const parsed = await loadParsed();
-			Object.assign(parsed.SaveGame, date);
-			const result = validateSave(parsed);
-			expect(result.valid).toBe(true);
-			expect(result.warnings).toEqual([message]);
-		},
-	);
+	])("warns about %s, a date the game never makes", async (_, date, message) => {
+		const parsed = await loadParsed();
+		Object.assign(parsed.SaveGame, date);
+		const result = validateSave(parsed);
+		expect(result.valid).toBe(true);
+		expect(result.warnings).toEqual([message]);
+	});
 
 	it("reads the season as the game does, ignoring case", async () => {
 		const parsed = await loadParsed();

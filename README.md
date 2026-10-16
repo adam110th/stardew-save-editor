@@ -17,7 +17,9 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
     started)
   - Finish the tool Clint is upgrading
   - Change relationships with NPCs, with each villager's description and loved gifts, and reset the
-    gifts given this week
+    gifts given this week. The loves come from the game's own gift-taste data: the villager's own,
+    then the universal loves they don't override (such as Prismatic Shard and Stardrop Tea). Search
+    by name, description or loved gift
 - ✅ Inventory Management  
   - Add/remove items
   - Modify existing items, including boots' defense and immunity
