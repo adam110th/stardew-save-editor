@@ -39,11 +39,7 @@ export class Inventory
 
 		// Prime numeric inventory slots
 		this[Raw].items.Item.forEach((entry, i) => {
-			if (
-				isNilSentinel(entry) ||
-				!entry ||
-				entry.name?.startsWith?.("Secret Note")
-			) {
+			if (isNilSentinel(entry) || !entry) {
 				super.set(i, undefined);
 			} else {
 				super.set(i, createItemProxy(entry));
@@ -63,11 +59,7 @@ export class Inventory
 		];
 		for (const slot of equipSlots) {
 			const rawEntry = this[Raw][slot];
-			if (
-				!rawEntry ||
-				isNilSentinel(rawEntry) ||
-				rawEntry?.name?.startsWith?.("Secret Note")
-			) {
+			if (!rawEntry || isNilSentinel(rawEntry)) {
 				// Treat undefined or nil sentinel as empty equipment
 				super.set(slot, undefined);
 				// Optional cleanup: eagerly remove nil sentinel from raw so it won't persist
@@ -102,6 +94,21 @@ export class Inventory
 			}
 		}
 		return super.set(index, value);
+	}
+
+	/** Lay out the backpack slots in order (used by sorting); items keep their proxies */
+	public arrange(items: ItemProxy[]) {
+		const raw = this[Raw].items.Item;
+		if (items.length > this.slotCount)
+			throw new Error(
+				`${items.length} items won't fit in ${this.slotCount} slots`,
+			);
+		for (let index = 0; index < this.slotCount; index++) {
+			const item = items[index];
+			// @ts-expect-error converting undefined to nil marker
+			raw[index] = item ? item[Raw] : nil;
+			super.set(index, item);
+		}
 	}
 
 	public delete(index: ParentIndex): boolean {

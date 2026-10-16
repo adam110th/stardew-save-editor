@@ -43,8 +43,9 @@
 		touch-action: none;
 	}
 
+	/* Keyboard focus shows it too, but a mouse click doesn't leave it stuck open */
 	.tooltip-wrapper:not(.flash):hover > .tooltip,
-	.tooltip-wrapper:not(.flash):focus-within > .tooltip {
+	.tooltip-wrapper:not(.flash):has(:focus-visible) > .tooltip {
 		display: block; /* Show on hover */
 	}
 

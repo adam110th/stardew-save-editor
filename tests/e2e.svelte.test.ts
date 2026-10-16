@@ -867,6 +867,51 @@ describe("Save Manager Integration Tests", () => {
 		});
 	});
 
+	describe("Inventory sorting and Secret Notes", () => {
+		it("sorts the backpack with the sort button", async () => {
+			const inventory = saveManager.save?.player.inventory;
+			if (!inventory) throw new Error("No inventory");
+			const parsnip = ItemFactory.fromName("Parsnip");
+			inventory.set(30, parsnip);
+			flushSync();
+			const toastManager = new ToastManager();
+			const page = harness.render(editorPage, {
+				context: setToastManagerContext(toastManager),
+			});
+			await fireEvent.click(page.getByTestId("sort-inventory"));
+			const used = [...Array(inventory.slotCount).keys()].filter(
+				(i) => inventory.get(i) !== undefined,
+			);
+			// Everything packed to the front, the Parsnip included
+			expect(used).toEqual([...Array(used.length).keys()]);
+			expect([...inventory.values()]).toContain(parsnip);
+		});
+
+		it("shows Secret Notes in the inventory", async () => {
+			const raw = saveManager.save?.player[Raw];
+			if (!raw) throw new Error("No player");
+			const note = {
+				"@_xsi:type": "Object",
+				name: "Secret Note #12",
+				itemId: "79",
+				parentSheetIndex: 79,
+				category: 0,
+				type: "asdf",
+				stack: 1,
+				quality: 0,
+			};
+			const { Inventory } = await import("$lib/proxies/Inventory.svelte");
+			raw.items.Item[20] = note as never;
+			let inventory!: InstanceType<typeof Inventory>;
+			const cleanup = $effect.root(() => {
+				inventory = new Inventory(raw);
+			});
+			expect(inventory.get(20)?.name).toBe("Secret Note #12");
+			expect(inventory.get(20)?.info?.name).toBe("Secret Note");
+			cleanup();
+		});
+	});
+
 	describe("Chests", () => {
 		const eligible = (chestIndex: number) =>
 			[...(saveManager.save?.chests[chestIndex]?.inventory.values() ?? [])]
@@ -945,6 +990,68 @@ describe("Save Manager Integration Tests", () => {
 			const sections = page.getAllByTestId("chest-section");
 			expect(sections).toHaveLength(1);
 			expect(sections[0]?.textContent).toContain("IslandFarmHouse - Fridge");
+		});
+
+		it("Ctrl+click picks several items and hides the item editor", async () => {
+			const page = renderChests();
+			expect(page.queryByTestId("chest-multi-selection")).toBeNull();
+
+			await fireEvent.click(page.getByTestId("chest-0-item-0"));
+			await fireEvent.click(page.getByTestId("chest-0-item-1"), {
+				ctrlKey: true,
+			});
+			await fireEvent.click(page.getByTestId("chest-0-item-2"), {
+				ctrlKey: true,
+			});
+			expect(page.getByTestId("chest-multi-selection").textContent).toContain(
+				"3 items selected",
+			);
+			expect(page.queryByTestId("item-name")).toBeNull();
+
+			// Ctrl+click again removes one; a plain click goes back to one item
+			await fireEvent.click(page.getByTestId("chest-0-item-2"), {
+				ctrlKey: true,
+			});
+			expect(page.getByTestId("chest-multi-selection").textContent).toContain(
+				"2 items selected",
+			);
+			await fireEvent.click(page.getByTestId("chest-0-item-5"));
+			expect(page.queryByTestId("chest-multi-selection")).toBeNull();
+		});
+
+		it("drags an item onto another slot", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			const first = chest?.inventory.get(0);
+			const emptySlot = 30;
+			expect(chest?.inventory.get(emptySlot)).toBeUndefined();
+
+			await fireEvent.dragStart(page.getByTestId("chest-0-drag-0"));
+			await fireEvent.drop(page.getByTestId(`chest-0-item-${emptySlot}`));
+			expect(chest?.inventory.get(emptySlot)).toBe(first);
+			expect(chest?.inventory.get(0)).toBeUndefined();
+		});
+
+		it("sorts a chest, and all chests, with the sort buttons", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			// Spread the items out so sorting has something to do
+			const first = chest.inventory.take(0);
+			if (first) chest.inventory.place(35, first);
+			flushSync();
+
+			await fireEvent.click(page.getByTestId("sort-chest-0"));
+			const used = chest.inventory.usedSlots;
+			for (let i = 0; i < chest.inventory.slotCount; i++)
+				expect(chest.inventory.get(i) !== undefined).toBe(i < used);
+
+			const fridge = saveManager.save?.chests[1];
+			const parsnip = ItemFactory.fromName("Parsnip");
+			fridge?.inventory.set(10, parsnip);
+			flushSync();
+			await fireEvent.click(page.getByTestId("sort-all-chests"));
+			expect(fridge?.inventory.get(0)).toBe(parsnip);
 		});
 	});
 
