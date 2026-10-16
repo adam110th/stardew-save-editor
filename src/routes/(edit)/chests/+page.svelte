@@ -295,123 +295,128 @@
 		</div>
 	</UiContainer>
 
-	<UiContainer>
-		<div class="chest-list" data-testid="chest-list" bind:this={chestList}>
-			{#each selectedGroup?.chests ?? [] as chest (chest.metadata.id)}
-				{@const color = chestColor(chest)}
-				{@const chestIndex = save.chests.indexOf(chest)}
-				<section
-					class="chest"
-					class:colored={color}
-					style:--chest-color={color?.css}
-					data-testid="chest-section"
-					aria-label={headings.get(chest)}
-					ondragover={allowDrop}
-					ondrop={(e) => dropOnChest(chest, e)}
-				>
-					<header>
-						<h4>{headings.get(chest)}</h4>
-						<small>
-							{chest.inventory.usedSlots} / {chest.inventory.slotCount} occupied
-							slots
-						</small>
-						<SortButton
-							label="Sort this chest"
-							nativeTooltip
-							onclick={() => sort(chest)}
-							data-testid={`sort-chest-${chestIndex}`}
-						/>
-					</header>
-					{#if chest.type}
-						<label class="chest-type">
-							<small
-								title="A smaller chest type is only available when all the items fit, so nothing is lost"
-								>Chest type:</small
-							>
-							<select
-								value={chest.type.itemId}
-								onchange={(e) => {
-									changeType(chest, e.currentTarget.value);
-									// Show the real type if the change was refused
-									e.currentTarget.value = chest.type?.itemId ?? "";
-								}}
-								data-testid={`chest-${chestIndex}-type`}
-							>
-								{#each SwappableChests as type (type.itemId)}
-									<option
-										value={type.itemId}
-										disabled={chest.inventory.usedSlots > type.capacity}
-										>{type.name} ({type.capacity} slots)</option
-									>
-								{/each}
-							</select>
-						</label>
-					{:else if chest.isMiniShippingBin}
-						<div class="chest-type">
-							<button
-								type="button"
-								onclick={() => expandBin(chest)}
-								data-testid={`chest-${chestIndex}-expand`}
-								title="It keeps its items, but no longer adds them to the nightly shipment"
-							>
-								Expand to 36 slots (becomes a regular Chest)
-							</button>
-						</div>
-					{/if}
-					<div class="item-grid">
-						{#each slots(chest) as { index, item }}
-							<ItemSlot
-								active={multiSelected
-									? isPicked(chest, index)
-									: chest === selectedChest && index === selectedIndex}
-								data-testid={`chest-${chestIndex}-item-${index}`}
-								onclick={(e) => select(chest, index, e)}
-								ondragover={allowDrop}
-								ondrop={(e) => dropOnSlot(chest, index, e)}
-							>
-								<div
-									class="item"
-									draggable={item !== undefined}
-									ondragstart={(e) => dragStart(chest, index, e)}
-									ondragend={() => (dragging = undefined)}
-									role="presentation"
-									data-testid={`chest-${chestIndex}-drag-${index}`}
-								>
-									<ItemSprite {item} />
-								</div>
-							</ItemSlot>
-						{/each}
-					</div>
-				</section>
-			{:else}
-				<p class="empty">
-					No {selectedGroup?.name.toLowerCase()} in this save.
-				</p>
-			{/each}
-		</div>
-	</UiContainer>
-
-	{#if multiSelected}
+	<div class="workspace">
 		<UiContainer>
-			<div class="picked" data-testid="chest-multi-selection">
-				<strong>{picked.length} items selected</strong>
-				<small>
-					Drag them onto another chest to move them together, or Ctrl+click an
-					item to add or remove it.
-				</small>
-				<button type="button" onclick={() => (picked = [])}>
-					Clear selection
-				</button>
+			<div class="chest-list" data-testid="chest-list" bind:this={chestList}>
+				{#each selectedGroup?.chests ?? [] as chest (chest.metadata.id)}
+					{@const color = chestColor(chest)}
+					{@const chestIndex = save.chests.indexOf(chest)}
+					<section
+						class="chest"
+						class:colored={color}
+						style:--chest-color={color?.css}
+						data-testid="chest-section"
+						aria-label={headings.get(chest)}
+						ondragover={allowDrop}
+						ondrop={(e) => dropOnChest(chest, e)}
+					>
+						<header>
+							<h4>{headings.get(chest)}</h4>
+							<small
+								class="used"
+								title={`${chest.inventory.usedSlots} of ${chest.inventory.slotCount} slots occupied`}
+							>
+								{chest.inventory.usedSlots}/{chest.inventory.slotCount}
+							</small>
+							{#if chest.type}
+								<select
+									class="chest-type"
+									value={chest.type.itemId}
+									onchange={(e) => {
+										changeType(chest, e.currentTarget.value);
+										// Show the real type if the change was refused
+										e.currentTarget.value = chest.type?.itemId ?? "";
+									}}
+									aria-label="Chest type"
+									title="Chest type. A smaller type is only available when all the items fit, so nothing is lost"
+									data-testid={`chest-${chestIndex}-type`}
+								>
+									{#each SwappableChests as type (type.itemId)}
+										<option
+											value={type.itemId}
+											disabled={chest.inventory.usedSlots > type.capacity}
+											>{type.name} ({type.capacity})</option
+										>
+									{/each}
+								</select>
+							{:else if chest.isMiniShippingBin}
+								<button
+									type="button"
+									class="chest-type"
+									onclick={() => expandBin(chest)}
+									data-testid={`chest-${chestIndex}-expand`}
+									title="Becomes a regular Chest. It keeps its items, but no longer adds them to the nightly shipment"
+								>
+									Expand to 36 slots
+								</button>
+							{/if}
+							<SortButton
+								label="Sort this chest"
+								nativeTooltip
+								onclick={() => sort(chest)}
+								data-testid={`sort-chest-${chestIndex}`}
+							/>
+						</header>
+						<div class="item-grid">
+							{#each slots(chest) as { index, item }}
+								<ItemSlot
+									active={multiSelected
+										? isPicked(chest, index)
+										: chest === selectedChest && index === selectedIndex}
+									data-testid={`chest-${chestIndex}-item-${index}`}
+									onclick={(e) => select(chest, index, e)}
+									ondragover={allowDrop}
+									ondrop={(e) => dropOnSlot(chest, index, e)}
+								>
+									<div
+										class="item"
+										draggable={item !== undefined}
+										ondragstart={(e) => dragStart(chest, index, e)}
+										ondragend={() => (dragging = undefined)}
+										role="presentation"
+										data-testid={`chest-${chestIndex}-drag-${index}`}
+									>
+										<ItemSprite {item} />
+									</div>
+								</ItemSlot>
+							{/each}
+						</div>
+					</section>
+				{:else}
+					<p class="empty">
+						No {selectedGroup?.name.toLowerCase()} in this save.
+					</p>
+				{/each}
 			</div>
 		</UiContainer>
-	{:else if selectedChest}
-		<UiContainer>
-			<small class="editing"
-				>Editing: {headings.get(selectedChest) ?? selectedChest.label}</small
-			>
-			<ItemView {selectedItem} {selectedIndex} {createItem} {deleteItem} />
-		</UiContainer>
-	{/if}
+
+		{#if multiSelected}
+			<div class="side">
+				<UiContainer>
+					<div class="picked" data-testid="chest-multi-selection">
+						<strong>{picked.length} items selected</strong>
+						<small>
+							Drag them onto another chest to move them together, or Ctrl+click
+							an item to add or remove it.
+						</small>
+						<button type="button" onclick={() => (picked = [])}>
+							Clear selection
+						</button>
+					</div>
+				</UiContainer>
+			</div>
+		{:else if selectedChest}
+			<div class="side">
+				<UiContainer>
+					<small class="editing"
+						>Editing: {headings.get(selectedChest) ??
+							selectedChest.label}</small
+					>
+					<ItemView {selectedItem} {selectedIndex} {createItem} {deleteItem} />
+				</UiContainer>
+			</div>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -490,14 +495,42 @@
 		color: #b56cff;
 	}
 
-	/* All the group's chests, scrolling within a 1920x1080 screen */
+	.workspace {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	/*
+	    All the group's chests, scrolling. Always tall enough for three
+	    regular (36-slot) chests, and taller when the screen has room.
+	*/
 	.chest-list {
+		--three-chests: calc(3 * 176px + 2 * 10px);
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		max-height: max(20rem, calc(100dvh - 590px));
+		max-height: max(var(--three-chests), calc(100dvh - 590px));
 		overflow-y: auto;
 		padding-right: 4px;
+	}
+
+	/*
+	    On wide screens the item editor sits to the right of the sidebar
+	    instead of under the list, so the list can use the full height
+	*/
+	@media (min-width: 1600px) {
+		.side {
+			position: absolute;
+			top: 0;
+			left: calc(100% + 48px);
+			width: 100%;
+		}
+
+		.chest-list {
+			max-height: max(var(--three-chests), calc(100dvh - 395px));
+		}
 	}
 
 	.chest {
@@ -515,21 +548,17 @@
 
 	.chest header {
 		display: flex;
-		justify-content: space-between;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: 4px 8px;
 		margin-bottom: 4px;
+	}
+
+	.used {
+		opacity: 0.8;
 	}
 
 	.chest-type {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-bottom: 4px;
-	}
-
-	.chest-type select,
-	.chest-type button {
 		font: inherit;
 		font-size: 0.85em;
 		padding: 1px 4px;
@@ -541,6 +570,7 @@
 	}
 
 	.chest h4 {
+		flex: 1;
 		margin: 0;
 	}
 
@@ -557,7 +587,8 @@
 	.item-grid {
 		display: grid;
 		grid-template-columns: repeat(12, min-content);
-		grid-auto-rows: 48px;
+		/* 36px slots, with a little space between rows */
+		grid-auto-rows: 40px;
 	}
 
 	.item {
