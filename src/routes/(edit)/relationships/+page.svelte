@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lovedGiftNames } from "$lib/LovedGifts";
 	import { characters } from "$lib/NPCs";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
 	import UiButton from "$lib/ui/UIButton.svelte";
@@ -12,18 +13,19 @@
 	const player = $derived(save.player);
 	const friendships = $derived(Array.from(player.friendships));
 	let search = $state("");
-	// Match the villager's name, description or loved gifts
+	// Match the villager's name, description or anything they love (their own
+	// loves, every item in a group such as Penny's books, and the universal
+	// loves they don't override)
 	const shown = $derived.by(() => {
 		const term = search.trim().toLowerCase();
 		if (!term) return friendships;
-		return friendships.filter(([name]) => {
-			const info = Villagers.get(name);
-			return [
+		return friendships.filter(([name]) =>
+			[
 				name,
-				info?.description ?? "",
-				...(info?.loves ?? []).map((g) => g.name),
-			].some((text) => text.toLowerCase().includes(term));
-		});
+				Villagers.get(name)?.description ?? "",
+				...lovedGiftNames(name),
+			].some((text) => text.toLowerCase().includes(term)),
+		);
 	});
 	const missingCharacters = $derived(
 		characters.filter((name) => !player.friendships.has(name)),
@@ -66,7 +68,7 @@
 		{/each}
 	</div>
 	<small class="credit">
-		Descriptions and loved gifts from the
+		Villager descriptions from the
 		<a href="https://stardewvalleywiki.com" target="_blank" rel="noreferrer"
 			>Stardew Valley Wiki</a
 		>

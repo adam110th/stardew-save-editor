@@ -97,6 +97,17 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 300 },
 			{ "item": "Stone", "amount": 100 }
+		],
+		"validOccupantTypes": ["Coop"],
+		"humanDoor": { "X": 1, "Y": 2 },
+		"animalDoor": { "X": 2, "Y": 2 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 3, "Y": 3 },
+				"indestructible": true
+			}
 		]
 	},
 	{
@@ -112,6 +123,17 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 350 },
 			{ "item": "Stone", "amount": 150 }
+		],
+		"validOccupantTypes": ["Barn"],
+		"humanDoor": { "X": 1, "Y": 3 },
+		"animalDoor": { "X": 3, "Y": 3 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 6, "Y": 3 },
+				"indestructible": true
+			}
 		]
 	},
 	{
@@ -165,7 +187,8 @@
 		"hayCapacity": 0,
 		"description": "An empty building. Fill it with whatever you like! The interior can be decorated.",
 		"buildCost": 15000,
-		"buildMaterials": [{ "item": "Wood", "amount": 300 }]
+		"buildMaterials": [{ "item": "Wood", "amount": 300 }],
+		"humanDoor": { "X": 3, "Y": 2 }
 	},
 	{
 		"name": "Fish Pond",
@@ -192,7 +215,8 @@
 		"hayCapacity": 0,
 		"description": "A home for a friend! Subsidized by the town agricultural fund.",
 		"buildCost": 100,
-		"buildMaterials": []
+		"buildMaterials": [],
+		"humanDoor": { "X": 2, "Y": 1 }
 	},
 	{
 		"name": "Pet Bowl",
@@ -234,6 +258,15 @@
 			{ "item": "Stone", "amount": 500 },
 			{ "item": "Refined Quartz", "amount": 10 },
 			{ "item": "Iridium Bar", "amount": 1 }
+		],
+		"validOccupantTypes": ["Slime"],
+		"humanDoor": { "X": 3, "Y": 3 },
+		"indoorItems": [
+			{
+				"id": "Default_SlimeIncubator",
+				"itemId": "(BC)156",
+				"tile": { "X": 1, "Y": 4 }
+			}
 		]
 	},
 	{
@@ -249,7 +282,35 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 400 },
 			{ "item": "Stone", "amount": 150 }
-		]
+		],
+		"buildingToUpgrade": "Coop",
+		"validOccupantTypes": ["Coop"],
+		"humanDoor": { "X": 1, "Y": 2 },
+		"animalDoor": { "X": 2, "Y": 2 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 3, "Y": 3 },
+				"indestructible": true
+			},
+			{
+				"id": "Default_Incubator",
+				"itemId": "(BC)101",
+				"tile": { "X": 2, "Y": 3 },
+				"indestructible": true
+			}
+		],
+		"indoorItemMoves": [
+			{
+				"source": { "X": 2, "Y": 3 },
+				"destination": { "X": 14, "Y": 8 },
+				"unlessItemId": "(BC)101"
+			},
+			{ "source": { "X": 1, "Y": 3 }, "destination": { "X": 14, "Y": 7 } },
+			{ "source": { "X": 10, "Y": 4 }, "destination": { "X": 14, "Y": 4 } }
+		],
+		"addMailOnBuild": ["incubator"]
 	},
 	{
 		"name": "Deluxe Coop",
@@ -264,7 +325,31 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 500 },
 			{ "item": "Stone", "amount": 200 }
-		]
+		],
+		"buildingToUpgrade": "Big Coop",
+		"validOccupantTypes": ["Coop"],
+		"humanDoor": { "X": 1, "Y": 2 },
+		"animalDoor": { "X": 2, "Y": 2 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 3, "Y": 3 },
+				"indestructible": true
+			},
+			{
+				"id": "Default_Incubator",
+				"itemId": "(BC)101",
+				"tile": { "X": 2, "Y": 3 },
+				"indestructible": true
+			}
+		],
+		"indoorItemMoves": [
+			{ "source": { "X": 14, "Y": 4 }, "destination": { "X": 20, "Y": 4 } },
+			{ "source": { "X": 14, "Y": 7 }, "destination": { "X": 21, "Y": 7 } },
+			{ "source": { "X": 14, "Y": 8 }, "destination": { "X": 21, "Y": 8 } }
+		],
+		"addMailOnBuild": ["incubator"]
 	},
 	{
 		"name": "Big Barn",
@@ -279,6 +364,28 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 450 },
 			{ "item": "Stone", "amount": 200 }
+		],
+		"buildingToUpgrade": "Barn",
+		"validOccupantTypes": ["Barn"],
+		"humanDoor": { "X": 1, "Y": 3 },
+		"animalDoor": { "X": 4, "Y": 3 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 6, "Y": 3 },
+				"indestructible": true
+			}
+		],
+		"indoorItemMoves": [
+			{ "source": { "X": 15, "Y": 3 }, "destination": { "X": 18, "Y": 13 } },
+			{ "source": { "X": 16, "Y": 3 }, "destination": { "X": 19, "Y": 13 } },
+			{ "source": { "X": 1, "Y": 4 }, "destination": { "X": 20, "Y": 3 } },
+			{
+				"source": { "X": 16, "Y": 4 },
+				"destination": { "X": 20, "Y": 4 },
+				"size": { "X": 1, "Y": 9 }
+			}
 		]
 	},
 	{
@@ -294,6 +401,29 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 550 },
 			{ "item": "Stone", "amount": 300 }
+		],
+		"buildingToUpgrade": "Big Barn",
+		"validOccupantTypes": ["Barn"],
+		"humanDoor": { "X": 1, "Y": 3 },
+		"animalDoor": { "X": 4, "Y": 3 },
+		"indoorItems": [
+			{
+				"id": "Default_FeedHopper",
+				"itemId": "(BC)99",
+				"tile": { "X": 6, "Y": 3 },
+				"indestructible": true
+			}
+		],
+		"indoorItemMoves": [
+			{ "source": { "X": 20, "Y": 3 }, "destination": { "X": 1, "Y": 4 } },
+			{ "source": { "X": 20, "Y": 5 }, "destination": { "X": 21, "Y": 13 } },
+			{
+				"source": { "X": 20, "Y": 6 },
+				"destination": { "X": 23, "Y": 6 },
+				"size": { "X": 1, "Y": 6 }
+			},
+			{ "source": { "X": 20, "Y": 4 }, "destination": { "X": 20, "Y": 13 } },
+			{ "source": { "X": 20, "Y": 12 }, "destination": { "X": 22, "Y": 13 } }
 		]
 	},
 	{
@@ -308,7 +438,9 @@
 		"buildMaterials": [
 			{ "item": "Wood", "amount": 550 },
 			{ "item": "Stone", "amount": 300 }
-		]
+		],
+		"buildingToUpgrade": "Shed",
+		"humanDoor": { "X": 3, "Y": 2 }
 	},
 	{
 		"name": "Shipping Bin",
@@ -330,7 +462,8 @@
 		"maxOccupants": 20,
 		"hayCapacity": 0,
 		"description": "Farmhouse",
-		"buildMaterials": []
+		"buildMaterials": [],
+		"humanDoor": { "X": 5, "Y": 2 }
 	},
 	{
 		"name": "Greenhouse",
@@ -341,6 +474,7 @@
 		"maxOccupants": 20,
 		"hayCapacity": 0,
 		"description": "A place to grow crops from any season, year round!",
-		"buildMaterials": []
+		"buildMaterials": [],
+		"humanDoor": { "X": 3, "Y": 5 }
 	}
 ]

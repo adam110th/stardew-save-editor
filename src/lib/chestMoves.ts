@@ -71,7 +71,7 @@ const TOOL_TYPES = new Set([
 	"GenericTool",
 ]);
 const STACKABLE_TYPES = new Set(["Object", "ColoredObject"]);
-const MAX_STACK = 999;
+export const MAX_STACK = 999;
 
 type RawFields = {
 	"@_xsi:type"?: string;
@@ -118,8 +118,8 @@ function compareItems(a: ItemProxy, b: ItemProxy) {
     editor edits) and `stack`, and both write the saved stack size, so change
     them together.
 */
-const count = (item: ItemProxy) => item.amount ?? item.stack;
-const setCount = (item: ItemProxy, n: number) => {
+export const count = (item: ItemProxy) => item.amount ?? item.stack;
+export const setCount = (item: ItemProxy, n: number) => {
 	item.stack = n;
 	if (item.amount !== undefined) item.amount = n;
 };
@@ -151,6 +151,8 @@ export function sortSlots(slots: SortableSlots) {
 		const item = slots.get(index);
 		if (item) items.push(item);
 	}
+	// Leave empty containers exactly as they were saved
+	if (!items.length) return;
 
 	const tools = items.filter((item) =>
 		TOOL_TYPES.has(raw(item)["@_xsi:type"] ?? ""),

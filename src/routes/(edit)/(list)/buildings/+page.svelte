@@ -12,6 +12,7 @@
 	import { Gender } from "$types/save";
 	import BuildingSprite from "../../inventory/BuildingSprite.svelte";
 	import ItemSprite from "../../inventory/ItemSprite.svelte";
+	import BuildingControls from "./BuildingControls.svelte";
 
 	let saveManager: ReturnType<typeof getSaveManager> | undefined;
 	try {
@@ -28,7 +29,7 @@
 		"Brown Chicken": "🐔",
 		"Blue Chicken": "🐔",
 		"Void Chicken": "🐔",
-		"Gold Chicken": "🐔",
+		"Golden Chicken": "🐔",
 		Duck: "🦆",
 		Rabbit: "🐰",
 		Dinosaur: "🦕",
@@ -97,10 +98,16 @@
 								<div class="building-header">
 									<div>
 										<h3>{building.name}</h3>
-										{#if building.indoorLocation?.animals}
-											{@const max = building.data?.maxOccupants ?? "??"}
-											{@const animals = building.indoorLocation.animals.length}
-											<small class="meta">{animals}/{max} animals inside</small>
+										{#if building.isAnimalHouse}
+											{@const outside = building.animalsOutside}
+											<small class="meta" data-testid="building-residents"
+												>{building.residentIds.length}/{building.capacity} animals
+												live here{outside ? ` (${outside} outside)` : ""}</small
+											>
+										{/if}
+										<!-- Coops and barns, and other buildings that can be upgraded (like sheds) -->
+										{#if save && (building.isAnimalHouse || building.tiers.length > 1)}
+											<BuildingControls {building} {save} />
 										{/if}
 										{#if building.data?.description}
 											<small
@@ -287,6 +294,32 @@
 																</button>
 															</div>
 														</div>
+
+														{#if animal.canReproduce}
+															<label
+																class="animal-field"
+																title="Whether it can get pregnant, as toggled on its info menu"
+															>
+																<small>Allow Pregnancy</small>
+																<UiCheckbox
+																	bind:checked={animal.allowReproduction}
+																	data-testid="animal-allow-pregnancy"
+																/>
+															</label>
+														{/if}
+
+														{#if animal.canEatGoldenCrackers}
+															<label
+																class="animal-field"
+																title="Ate a Golden Animal Cracker, which doubles its produce"
+															>
+																<small>Golden Cracker</small>
+																<UiCheckbox
+																	bind:checked={animal.hasEatenAnimalCracker}
+																	data-testid="animal-golden-cracker"
+																/>
+															</label>
+														{/if}
 													</div>
 												</section>
 											</UiContainerSmall>

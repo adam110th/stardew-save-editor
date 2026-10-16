@@ -26,6 +26,11 @@ import weapons from "../content/Data/Weapons.json" with { type: "json" };
 import { characters } from "../src/lib/NPCs.js";
 import { getBuildMaterials } from "./buildingCost.js";
 import {
+	type BuildingUpgradeSource,
+	getBuildingUpgradeData,
+} from "./buildingUpgrade.js";
+import { type ItemInfo, villagerGifts } from "./giftTastes.js";
+import {
 	createArtisanGoods,
 	fixTexture,
 	thrw,
@@ -42,6 +47,7 @@ import {
 	type Size,
 } from "./items.js";
 import { createLocalizedTextResolver } from "./localizedText.js";
+import { getQuests } from "./quests.js";
 import {
 	createSpecialOrderResolver,
 	parseRequiredCount,
@@ -304,6 +310,23 @@ const writeToFile = JSON.stringify(
 await mkdir("./generated", { recursive: true });
 await writeFile("./generated/iteminfo.json", writeToFile);
 
+// **Gift tastes**
+
+// Each villager's loved gifts, worked out from Data/NPCGiftTastes the way the
+// game does (see giftTastes.ts) for every giftable item written above
+const giftTastes = JSON.parse(
+	await readFile("./content/Data/NPCGiftTastes.json", "utf-8"),
+) as Record<string, string>;
+const { villagers: lovedGifts, unmatched } = villagerGifts(
+	giftTastes,
+	JSON.parse(writeToFile) as [string, ItemInfo][],
+	characters,
+);
+if (unmatched.length > 0) {
+	console.warn(`No giftable item for loved gifts: ${unmatched.join(", ")}`);
+}
+await writeFile("./generated/gifttastes.json", JSON.stringify(lovedGifts));
+
 // **Recipes**
 
 const cookingRecipes = JSON.parse(
@@ -428,6 +451,17 @@ const qiQuestsArray = Object.entries(specialOrders)
 	});
 await writeFile("./generated/qiquests.json", JSON.stringify(qiQuestsArray));
 
+// **Quests**
+
+// Story quests, so completing one in the editor can start the next as the game does
+const questData = JSON.parse(
+	await readFile("./content/Data/Quests.json", "utf-8"),
+) as Record<string, string>;
+await writeFile(
+	"./generated/quests.json",
+	JSON.stringify(getQuests(questData)),
+);
+
 // **Assets**
 
 // Copy all textures into assets folder
@@ -514,6 +548,8 @@ const farmAnimals = Object.entries(animals).map(([key, obj]) => ({
 	requiredBuilding: obj.RequiredBuilding,
 	house: obj.House,
 	canReproduce: obj.CanGetPregnant,
+	// Optional, default true; false for pigs
+	canEatGoldenCrackers: obj.CanEatGoldenCrackers ?? true,
 }));
 await writeFile("./generated/farmanimals.json", JSON.stringify(farmAnimals));
 
@@ -571,6 +607,7 @@ const buildingsArray = await Promise.all(
 			description: resolveDescription(cost.Description) || undefined,
 			buildCost: cost.BuildCost || undefined,
 			buildMaterials: getBuildMaterials(cost.BuildMaterials, objectNames),
+			...getBuildingUpgradeData(obj as BuildingUpgradeSource),
 		};
 	}),
 );

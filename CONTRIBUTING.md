@@ -25,7 +25,34 @@ Follow [these instructions from the SDV Wiki](https://stardewvalleywiki.com/Modd
 
 Then run `npm run dump`.
 
-If you need assets that aren't copied from that command, you can modify it in `src/dump.ts`.
+If you need assets that aren't copied from that command, you can modify it in `codegen/dump.ts`.
+
+The generated data comes from two scripts:
+
+- `npm run dump` reads the `content` folder. It copies textures and portraits into `static/assets` and writes everything in `generated/` except `villagers.json`. That includes `gifttastes.json`, each villager's loved gifts, worked out from `content/Data/NPCGiftTastes.json` with the game's own rules (see `codegen/giftTastes.ts`); it prints any loved gift it can't match to an item.
+- `npm run dump:villagers` writes `generated/villagers.json`. Villager descriptions aren't in the game files, so it fetches them from the [Stardew Valley Wiki](https://stardewvalleywiki.com) (CC BY-NC-SA 3.0). It needs `curl` and an internet connection, but not the `content` folder.
+
+`generated/buildings.json` includes what the editor needs to upgrade buildings (each building's
+`buildingToUpgrade`, `validOccupantTypes`, doors, and the items the game adds or moves inside), taken
+from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
+
+`generated/farmanimals.json` has each animal's house, and whether it can get pregnant
+(`CanGetPregnant`) or eat a Golden Animal Cracker (`CanEatGoldenCrackers`), from `Data/FarmAnimals`.
+
+`generated/quests.json` is `Data/Quests`, parsed by `codegen/quests.ts` the way the game reads it
+(`Quest.getQuestFromId`), so completing a story quest in the editor can start the next one.
+
+Some data isn't in the game's files, so it comes from the wikis instead. `npm run dump:villagers`
+refreshes `generated/villagers.json` (descriptions and loved gifts, from the
+[Stardew Valley Wiki](https://stardewvalleywiki.com)) and `npm run dump:events` refreshes
+`generated/events.json` (event names, from the Stardew Modding Wiki's
+[List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)). They need
+`curl` rather than the `content` folder; run `npm run format` afterwards.
+
+The festival dates and weather rules in `src/lib/calendar.ts` aren't generated: they're written from
+`Data/Festivals/FestivalDates`, `Data/PassiveFestivals` and the game's weather code
+(`Game1.getWeatherModificationsForDate`, `LocationWeather`, `Utility.isGreenRainDay`), so check them
+when a game update changes festivals or weather.
 
 ### Reading the Save File
 

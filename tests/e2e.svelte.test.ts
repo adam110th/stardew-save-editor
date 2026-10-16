@@ -11,6 +11,7 @@ import {
 } from "$lib/proxies/bundleSerialization";
 import { Color as ColorProxy } from "$lib/proxies/Color.svelte";
 import { FarmAnimal, FarmAnimalType } from "$lib/proxies/FarmAnimal.svelte";
+import { getStatValue } from "$lib/proxies/Farmer.svelte";
 import { Item as ItemFactory } from "$lib/proxies/Item.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
 import { canHaveQuality } from "$lib/setItemQuality";
@@ -29,10 +30,23 @@ import appearancePage from "../src/routes/(edit)/appearance/+page.svelte";
 import bundlesPage from "../src/routes/(edit)/bundles/+page.svelte";
 import characterPage from "../src/routes/(edit)/character/+page.svelte";
 import chestsPage from "../src/routes/(edit)/chests/+page.svelte";
+import eventsPage from "../src/routes/(edit)/events/+page.svelte";
 import farmPage from "../src/routes/(edit)/farm/+page.svelte";
 import editorPage from "../src/routes/(edit)/inventory/+page.svelte";
 import BuildingSprite from "../src/routes/(edit)/inventory/BuildingSprite.svelte";
+import questsPage from "../src/routes/(edit)/quests/+page.svelte";
 import relationshipsPage from "../src/routes/(edit)/relationships/+page.svelte";
+import {
+	BARN_ANIMALS,
+	BARN_ID,
+	barnXml,
+	COOP_ID,
+	coopXml,
+	SHED_ID,
+	shedXml,
+	withAnimalBuildings,
+} from "./helpers/animalBuildings";
+import { withHouse, withToolAtClint } from "./helpers/upgrades";
 
 interface PageHarness {
 	saveManager: SaveManager;
@@ -61,12 +75,12 @@ const once = (fn: () => void) => {
 	};
 };
 
-// `edit` rewrites the fixture's XML before import, for saves TestSave doesn't cover
+/** @param transformXml Changes the test save before it's loaded */
 const createPageHarness = async (
-	edit?: (xml: string) => string,
+	transformXml?: (xml: string) => string,
 ): Promise<PageHarness> => {
-	const fixture = await readFile("tests/TestSave");
-	const file = edit ? edit(fixture.toString("utf8")) : fixture;
+	const save = await readFile("tests/TestSave");
+	const file = transformXml ? transformXml(save.toString("utf-8")) : save;
 
 	let saveManager!: SaveManager;
 	let importPromise!: Promise<void>;
@@ -317,6 +331,31 @@ describe("Save Manager Integration Tests", () => {
 
 			const rawItem9 = saveManager.save?.player.inventory.get(9)?.[Raw];
 			expect(rawItem9?.name).toBe("Leek");
+		});
+
+		it("edits boots' defense and immunity", async () => {
+			const page = harness.render(editorPage);
+			await fireEvent.click(page.getByTestId("item-9"));
+			await tick();
+			const input = page.getByTestId("item-name") as HTMLInputElement;
+			await fireEvent.input(input, { target: { value: "Sneakers" } });
+			await tick();
+			await fireEvent.click(page.getByText("Sneakers"));
+			await tick();
+
+			const defense = page.getByTestId(
+				"property-defenseBonus",
+			) as HTMLInputElement;
+			const immunity = page.getByTestId(
+				"property-immunityBonus",
+			) as HTMLInputElement;
+			expect(defense.value).toBe("1");
+			expect(immunity.value).toBe("0");
+			await fireEvent.input(defense, { target: { value: "5" } });
+			await fireEvent.input(immunity, { target: { value: "3" } });
+			flushSync();
+			const raw = saveManager.save?.player.inventory.get(9)?.[Raw];
+			expect(raw).toMatchObject({ defenseBonus: 5, immunityBonus: 3 });
 		});
 
 		it("shows the description of the selected item", async () => {
@@ -683,6 +722,175 @@ describe("Save Manager Integration Tests", () => {
 		});
 	});
 
+	describe("Upgrades", () => {
+		it("makes the backpack bigger, and smaller once it's empty", async () => {
+			const page = harness.render(characterPage);
+			const player = () => {
+				if (!saveManager.save) throw new Error("No save");
+				return saveManager.save.player;
+			};
+			const select = page.getByTestId("backpack-size") as HTMLSelectElement;
+			expect(select.value).toBe("12");
+
+			await choose(select, "24");
+			expect(player()[Raw].maxItems).toBe(24);
+			expect(player()[Raw].items.Item).toHaveLength(24);
+
+			// Something in the second row stops it shrinking back
+			player().inventory.set(15, ItemFactory.fromName("Parsnip"));
+			flushSync();
+			const option = (value: string) =>
+				[...select.options].find((o) => o.value === value);
+			expect(option("12")?.disabled).toBe(true);
+			expect(option("36")?.disabled).toBe(false);
+			player().inventory.delete(15);
+			flushSync();
+			expect(option("12")?.disabled).toBe(false);
+		});
+
+		it("starts a house upgrade the game finishes overnight", async () => {
+			const page = harness.render(characterPage);
+			const raw = () => saveManager.save?.player[Raw];
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("0");
+			expect(page.getByTestId("house-upgrade-hint").textContent).toMatch(
+				/Now: Starting house\. Days until Robin adds\s+the kitchen/,
+			);
+
+			expect(page.queryByTestId("house-upgrade-cancel")).toBeNull();
+
+			await fireEvent.input(days, { target: { value: "1" } });
+			expect(raw()?.daysUntilHouseUpgrade).toBe(1);
+			expect(raw()?.houseUpgradeLevel).toBe(0);
+			// Once it's started, the button stops it
+			expect(days.min).toBe("1");
+			await fireEvent.click(page.getByTestId("house-upgrade-cancel"));
+			expect(raw()?.daysUntilHouseUpgrade).toBe(-1);
+			expect(days.value).toBe("0");
+			expect(page.queryByTestId("house-upgrade-cancel")).toBeNull();
+		});
+
+		it("sets the trash can's level", async () => {
+			const page = harness.render(characterPage);
+			await choose(page.getByTestId("trash-can-level"), "2");
+			expect(saveManager.save?.player[Raw].trashCanLevel).toBe(2);
+			// Nothing at Clint's in the test save
+			expect(page.queryByTestId("tool-upgrade-days")).toBeNull();
+		});
+
+		it("edits Mastery XP", async () => {
+			const page = harness.render(characterPage);
+			const input = page.getByTestId("skills-mastery") as HTMLInputElement;
+			await fireEvent.input(input, { target: { value: "30000" } });
+			flushSync();
+			const player = saveManager.save?.player;
+			if (!player) throw new Error("No save");
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(30000);
+			expect(page.getByTestId("mastery-level").textContent).toBe("Level 2/5");
+
+			// Cleared, it waits for a number rather than calling it invalid
+			await fireEvent.input(input, { target: { value: "" } });
+			expect(input.checkValidity()).toBe(true);
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(30000);
+			// Left empty, it goes back to the minimum
+			await fireEvent.blur(input);
+			expect(input.value).toBe("0");
+			expect(input.checkValidity()).toBe(true);
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(0);
+		});
+
+		it("shows a modded backpack size as text", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace("<maxItems>12</maxItems>", "<maxItems>48</maxItems>"),
+			);
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const size = page.getByTestId("backpack-size");
+			expect(size.tagName).toBe("SPAN");
+			expect(size.textContent).toBe("48 slots");
+		});
+
+		it("cancels a house upgrade Robin has started", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) => withHouse(xml, 1, 2));
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const raw = () => saveManager.save?.player[Raw];
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("2");
+			expect(page.getByTestId("house-upgrade-hint").textContent).toMatch(
+				/Now: Kitchen\. Days until Robin\s+finishes the nursery/,
+			);
+
+			// 0 is below the minimum, so it can't cancel the upgrade by mistake
+			await fireEvent.input(days, { target: { value: "0" } });
+			expect(days.checkValidity()).toBe(false);
+			await fireEvent.blur(days);
+			expect(days.value).toBe("2");
+			expect(raw()?.daysUntilHouseUpgrade).toBe(2);
+
+			await fireEvent.click(page.getByTestId("house-upgrade-cancel"));
+			expect(raw()?.daysUntilHouseUpgrade).toBe(-1);
+			expect(raw()?.houseUpgradeLevel).toBe(1);
+			expect(days.value).toBe("0");
+		});
+
+		it("won't upgrade the house past the cellar", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) => withHouse(xml, 3));
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.disabled).toBe(true);
+			expect(page.getByTestId("house-upgrade-hint").textContent?.trim()).toBe(
+				"Fully upgraded (Cellar).",
+			);
+		});
+	});
+
+	describe("Upgrades at Clint's", () => {
+		const renderAtClint = async (itemId?: string) => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				withToolAtClint(xml, 2, itemId),
+			);
+			saveManager = harness.saveManager;
+			return harness.render(characterPage);
+		};
+
+		it("finishes the tool Clint is upgrading", async () => {
+			const page = await renderAtClint();
+			expect(page.getByText(/Clint: Copper Pickaxe/)).toBeTruthy();
+			const days = page.getByTestId("tool-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("2");
+			await fireEvent.input(days, { target: { value: "0" } });
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(0);
+		});
+
+		it("waits for a number when Clint's days are cleared", async () => {
+			const page = await renderAtClint();
+			const days = page.getByTestId("tool-upgrade-days") as HTMLInputElement;
+			await fireEvent.input(days, { target: { value: "" } });
+			expect(days.checkValidity()).toBe(true);
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(2);
+			// Left empty, it goes back to the minimum: ready now
+			await fireEvent.blur(days);
+			expect(days.value).toBe("0");
+			expect(days.checkValidity()).toBe(true);
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(0);
+		});
+
+		it("locks the trash can while Clint has it", async () => {
+			const page = await renderAtClint("CopperTrashCan");
+			const select = page.getByTestId("trash-can-level") as HTMLSelectElement;
+			expect(select.disabled).toBe(true);
+			expect(
+				page.getByText("Clint is upgrading it; collect it from him first."),
+			).toBeTruthy();
+		});
+	});
+
 	describe("Relationships", () => {
 		it("should preserve relationships when opening the page and editing money", async () => {
 			const save = saveManager.save;
@@ -760,7 +968,7 @@ describe("Save Manager Integration Tests", () => {
 			);
 		});
 
-		it("shows each villager's description and loved gifts", () => {
+		it("shows each villager's description", () => {
 			const page = harness.render(relationshipsPage);
 			const row = page
 				.getAllByTestId("friendship-row")
@@ -773,10 +981,78 @@ describe("Save Manager Integration Tests", () => {
 			expect(
 				within(row).getByTestId("friendship-description").textContent,
 			).toMatch(/^Lewis is/);
-			const gifts = within(row).getAllByTestId("friendship-loved-gift");
-			expect(gifts.map((g) => g.getAttribute("title"))).toContain(
-				"Loves: Autumn's Bounty",
+		});
+
+		it("shows each villager's own and universal loves as item icons", () => {
+			const page = harness.render(relationshipsPage);
+			const rowFor = (name: string) => {
+				const row = page
+					.getAllByTestId("friendship-row")
+					.find(
+						(r) =>
+							within(r).getByTestId("friendship-name").textContent === name,
+					);
+				if (!row) throw new Error(`No row for ${name}`);
+				return row;
+			};
+			const labels = (icons: HTMLElement[]) =>
+				icons.map((icon) => icon.getAttribute("aria-label"));
+
+			const lewis = rowFor("Lewis");
+			const gifts = within(lewis).getAllByTestId("friendship-loved-gift");
+			expect(labels(gifts)).toEqual([
+				"Autumn's Bounty",
+				"Glazed Yams",
+				"Green Tea",
+				"Hot Pepper",
+				"Vegetable Medley",
+			]);
+			const universal = within(lewis).getAllByTestId(
+				"friendship-universal-love",
 			);
+			expect(labels(universal)).toEqual([
+				"Golden Pumpkin",
+				"Magic Rock Candy",
+				"Pearl",
+				"Prismatic Shard",
+				"Rabbit's Foot",
+				"Stardrop Tea",
+			]);
+			for (const gift of [...gifts, ...universal]) {
+				expect(gift.getAttribute("role")).toBe("img");
+				expect(gift.getAttribute("title")).toBe(
+					gift.getAttribute("aria-label"),
+				);
+				// A drawn sprite, not the "??" placeholder
+				expect(gift.querySelector("svg image")).toBeTruthy();
+			}
+			// Two lists, with the universal loves after the villager's own
+			const own = within(lewis).getByRole("list", {
+				name: "Lewis's loved gifts",
+			});
+			const shared = within(lewis).getByRole("list", {
+				name: "Lewis's universal loves",
+			});
+			expect(within(own).getAllByRole("img")).toEqual(gifts);
+			expect(within(shared).getAllByRole("img")).toEqual(universal);
+			expect(
+				own.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+			expect(within(lewis).getByText("Universal loves")).toBeTruthy();
+
+			// Haley hates Prismatic Shard, so it isn't one of her universal loves;
+			// Stardrop Tea is, as nobody can override it
+			expect(
+				labels(
+					within(rowFor("Haley")).getAllByTestId("friendship-universal-love"),
+				),
+			).toEqual([
+				"Golden Pumpkin",
+				"Magic Rock Candy",
+				"Pearl",
+				"Rabbit's Foot",
+				"Stardrop Tea",
+			]);
 		});
 
 		it("should update friendship hearts", async () => {
@@ -808,6 +1084,25 @@ describe("Save Manager Integration Tests", () => {
 				const rawFriend = friendship[Raw];
 				expect(rawFriend.value.Friendship.Points).toBe(targetHearts * 250);
 			}
+		});
+
+		it("edits the gifts given this week", async () => {
+			const page = harness.render(relationshipsPage);
+			const firstRow = page.getAllByTestId("friendship-row")[0] as HTMLElement;
+			const name = within(firstRow).getByTestId("friendship-name").textContent;
+			const friendship = saveManager.save?.player.friendships.get(name ?? "");
+			if (!friendship) throw new Error(`No friendship with ${name}`);
+
+			const gifts = within(firstRow).getByTestId(
+				"friendship-gifts-week",
+			) as HTMLInputElement;
+			expect(gifts.value).toBe(String(friendship.giftsThisWeek));
+			await fireEvent.input(gifts, { target: { value: "2" } });
+			flushSync();
+			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(2);
+			await fireEvent.input(gifts, { target: { value: "0" } });
+			flushSync();
+			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(0);
 		});
 	});
 
@@ -868,6 +1163,140 @@ describe("Save Manager Integration Tests", () => {
 			// TestSave is a Hill-top farm (whichFarm 3)
 			expect(values).toContain("Hill-top");
 			expect(values).toContain("390176213");
+		});
+
+		it("changes the date from the calendar", async () => {
+			const page = harness.render(farmPage);
+			const game = saveManager.save?.raw.SaveGame;
+			if (!game) return;
+			const date = page.getByTestId("calendar-date");
+			expect(date.textContent?.trim()).toBe("Saturday, Spring 6, Year 1");
+			expect(
+				page.getByTestId("calendar-day-6").getAttribute("aria-pressed"),
+			).toBe("true");
+			expect(
+				page.getByTestId("calendar-day-16").getAttribute("aria-label"),
+			).toBe("Spring 16, Desert Festival");
+
+			await fireEvent.click(page.getByTestId("calendar-day-10"));
+			await choose(page.getByTestId("calendar-season"), "summer");
+			// The year applies on change, not while it's being typed
+			const year = page.getByTestId("calendar-year");
+			await fireEvent.input(year, { target: { value: "2" } });
+			flushSync();
+			expect(game.year).toBe(1);
+			await fireEvent.change(year);
+			flushSync();
+
+			expect(game.dayOfMonth).toBe(10);
+			expect(game.currentSeason).toBe("summer");
+			expect(game.year).toBe(2);
+			expect(game.player.yearForSaveGame).toBe(2);
+			expect(date.textContent?.trim()).toBe("Wednesday, Summer 10, Year 2");
+			expect(
+				page.getByTestId("calendar-day-10").getAttribute("aria-pressed"),
+			).toBe("true");
+			expect(
+				page.getByTestId("calendar-day-6").getAttribute("aria-pressed"),
+			).toBe("false");
+			expect(
+				page.getByTestId("calendar-day-11").getAttribute("aria-label"),
+			).toBe("Summer 11, Luau");
+		});
+
+		it("keeps the year when its field is left empty", async () => {
+			const page = harness.render(farmPage);
+			const game = saveManager.save?.raw.SaveGame;
+			if (!game) return;
+			const year = page.getByTestId("calendar-year") as HTMLInputElement;
+			await fireEvent.input(year, { target: { value: "3" } });
+			await fireEvent.change(year);
+			flushSync();
+			expect(game.year).toBe(3);
+
+			await fireEvent.input(year, { target: { value: "" } });
+			await fireEvent.change(year);
+			await fireEvent.blur(year);
+			flushSync();
+			expect(game.year).toBe(3);
+			expect(year.value).toBe("3");
+		});
+
+		it("explains a date the game never makes", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace("<year>1</year>", "<year>0</year>"),
+			);
+			saveManager = harness.saveManager;
+			const page = harness.render(farmPage);
+			expect(page.getByTestId("calendar-date-problem").textContent).toContain(
+				"There's no Year 0",
+			);
+
+			await fireEvent.click(page.getByTestId("calendar-day-10"));
+			flushSync();
+			expect(saveManager.save?.raw.SaveGame.year).toBe(1);
+			expect(page.queryByTestId("calendar-date-problem")).toBeNull();
+		});
+
+		it("offers only the weather the season can have", async () => {
+			const page = harness.render(farmPage);
+			const options = (testId: string) =>
+				[...(page.getByTestId(testId) as HTMLSelectElement).options]
+					.filter((o) => !o.disabled)
+					.map((o) => o.value);
+			expect(options("weather-today")).toEqual([
+				"Sun",
+				"Rain",
+				"Storm",
+				"Wind",
+			]);
+			expect(options("weather-tomorrow")).not.toContain("Snow");
+			expect(options("weather-tomorrow")).not.toContain("GreenRain");
+
+			await choose(page.getByTestId("calendar-season"), "winter");
+			flushSync();
+			expect(options("weather-tomorrow")).toContain("Snow");
+			expect(options("weather-tomorrow")).not.toContain("Wind");
+		});
+
+		it("sets today's and tomorrow's weather", async () => {
+			const page = harness.render(farmPage);
+			const game = saveManager.save?.raw.SaveGame;
+			if (!game) return;
+			expect(
+				(page.getByTestId("weather-today") as HTMLSelectElement).value,
+			).toBe("Rain");
+
+			await choose(page.getByTestId("weather-today"), "Sun");
+			await choose(page.getByTestId("weather-tomorrow"), "Rain");
+			flushSync();
+
+			expect(game.isRaining).toBe(false);
+			expect(game.weatherForTomorrow).toBe("Rain");
+			const valley = game.locationWeather.item.find(
+				(entry) => entry.key.string === "Default",
+			)?.value.LocationWeather;
+			expect(valley?.WeatherForTomorrow).toBe("Rain");
+			expect(valley?.Weather).toBe("Sun");
+		});
+
+		it("locks the forecast the night before a festival", async () => {
+			const page = harness.render(farmPage);
+			await fireEvent.click(page.getByTestId("calendar-day-12"));
+			flushSync();
+
+			const tomorrow = page.getByTestId(
+				"weather-tomorrow",
+			) as HTMLSelectElement;
+			expect(tomorrow.disabled).toBe(true);
+			expect(tomorrow.value).toBe("Festival");
+			expect(page.getByTestId("weather-tomorrow-forced").textContent).toContain(
+				"Egg Festival",
+			);
+			expect(saveManager.save?.raw.SaveGame.weatherForTomorrow).toBe(
+				"Festival",
+			);
 		});
 
 		it("names Meadowlands by its farm type ID", async () => {
@@ -1079,7 +1508,7 @@ describe("Save Manager Integration Tests", () => {
 	});
 
 	describe("Relationships search", () => {
-		it("filters villagers by name or loved gift", async () => {
+		it("filters villagers by name or description", async () => {
 			const page = harness.render(relationshipsPage);
 			const names = () =>
 				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
@@ -1087,7 +1516,14 @@ describe("Save Manager Integration Tests", () => {
 			expect(all).toBeGreaterThan(2);
 
 			const search = page.getByTestId("relationships-search");
-			await fireEvent.input(search, { target: { value: "lew" } });
+			// Case-insensitive, ignoring surrounding whitespace
+			await fireEvent.input(search, { target: { value: "  lEW " } });
+			expect(names()).toEqual(["Lewis"]);
+			// The encountered count still reflects every villager
+			expect(page.getByText(`NPCs encountered: ${all}`)).toBeTruthy();
+
+			// "mayor" is only in Lewis's description
+			await fireEvent.input(search, { target: { value: "Mayor" } });
 			expect(names()).toEqual(["Lewis"]);
 
 			await fireEvent.input(search, { target: { value: "zzzz" } });
@@ -1096,6 +1532,92 @@ describe("Save Manager Integration Tests", () => {
 
 			await fireEvent.input(search, { target: { value: "" } });
 			expect(names()).toHaveLength(all);
+		});
+
+		it("filters villagers by loved gift", async () => {
+			const page = harness.render(relationshipsPage);
+			const names = () =>
+				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
+			const all = names();
+
+			const search = page.getByTestId("relationships-search");
+			expect(search.getAttribute("placeholder")).toBe(
+				"Search villagers or loved gifts...",
+			);
+
+			await fireEvent.input(search, { target: { value: " DIAMOND  " } });
+			expect(names().sort()).toEqual([
+				"Evelyn",
+				"Jodi",
+				"Marnie",
+				"Maru",
+				"Willy",
+			]);
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(within(row).getByRole("img", { name: "Diamond" })).toBeTruthy();
+			}
+
+			// Part of a gift name works too
+			await fireEvent.input(search, { target: { value: "pink ca" } });
+			expect(names().sort()).toEqual(["Haley", "Jas", "Marnie"]);
+
+			await fireEvent.input(search, { target: { value: "" } });
+			expect(names()).toEqual(all);
+		});
+
+		it("filters villagers by universal loves, minus their overrides", async () => {
+			const page = harness.render(relationshipsPage);
+			const names = () =>
+				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
+			const all = names();
+			expect(all).toContain("Haley");
+			const search = page.getByTestId("relationships-search");
+			const universalLabels = (row: HTMLElement) =>
+				within(row)
+					.getAllByTestId("friendship-universal-love")
+					.map((icon) => icon.getAttribute("aria-label"));
+
+			// Everyone loves Prismatic Shard, except Haley, who hates it
+			await fireEvent.input(search, { target: { value: "Prismatic" } });
+			expect(names()).toEqual(all.filter((name) => name !== "Haley"));
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(universalLabels(row)).toContain("Prismatic Shard");
+			}
+
+			// Nobody can override Stardrop Tea, so it lists everyone
+			await fireEvent.input(search, { target: { value: "stardrop tea" } });
+			expect(names()).toEqual(all);
+			for (const row of page.getAllByTestId("friendship-row")) {
+				expect(universalLabels(row)).toContain("Stardrop Tea");
+			}
+
+			// With every villager met: everyone loves Rabbit's Foot but Penny
+			await fireEvent.click(page.getByTestId("add-missing-friendships"));
+			await tick();
+			await fireEvent.input(search, { target: { value: "rabbit's foot" } });
+			expect(names().sort()).toEqual(
+				characters.filter((name) => name !== "Penny").sort(),
+			);
+
+			// Penny loves every book, shown once as "Any book"
+			await fireEvent.input(search, {
+				target: { value: "monster compendium" },
+			});
+			expect(names().sort()).toEqual(["Abigail", "Krobus", "Penny"]);
+			const penny = page
+				.getAllByTestId("friendship-row")
+				.find(
+					(row) =>
+						within(row).getByTestId("friendship-name").textContent === "Penny",
+				);
+			if (!penny) throw new Error("No row for Penny");
+			const books = within(penny).getByRole("img", { name: "Any book" });
+			expect(books.getAttribute("title")).toMatch(
+				/^Any book: .*Monster Compendium/,
+			);
+
+			await fireEvent.input(search, { target: { value: "" } });
+			expect(names()).toHaveLength(characters.length);
 		});
 	});
 
@@ -1126,9 +1648,8 @@ describe("Save Manager Integration Tests", () => {
 				building.indoorLocation[Raw].Animals
 					.SerializableDictionaryOfInt64FarmAnimal,
 			).toEqual(building.indoorLocation[Raw].animals);
-			expect(building.indoorLocation[Raw].animalsThatLiveHere).toEqual({
-				long: [animal[Raw].key.long],
-			});
+			// Who lives where is kept separately (residents can be outside); see "Animal buildings"
+			expect(building.indoorLocation[Raw].animalsThatLiveHere).toBeUndefined();
 			disposeAnimal();
 		});
 
@@ -1233,7 +1754,7 @@ describe("Save Manager Integration Tests", () => {
 				expect(within(cost).getByTitle("Stone").textContent).toContain("100");
 			} finally {
 				for (const key of ["description", "buildCost", "buildMaterials"])
-					delete (data as Record<string, unknown>)[key];
+					delete (data as unknown as Record<string, unknown>)[key];
 			}
 		});
 
@@ -1373,5 +1894,829 @@ describe("Save Manager Integration Tests", () => {
 			expect(view.container.textContent).not.toContain("??");
 			expect(view.container.querySelector(".item")).toBeTruthy();
 		});
+	});
+
+	describe("Quests", () => {
+		const renderQuests = () => {
+			const toastManager = new ToastManager();
+			const context = setToastManagerContext(toastManager);
+			return { page: harness.render(questsPage, { context }), toastManager };
+		};
+		const entry = (
+			page: { getAllByTestId: (id: string) => HTMLElement[] },
+			title: string,
+		) => {
+			const found = page
+				.getAllByTestId("quest")
+				.find(
+					(el) => within(el).getByTestId("quest-title").textContent === title,
+				);
+			if (!found) throw new Error(`No quest called ${title}`);
+			return within(found);
+		};
+		const rawQuests = () => {
+			const log = saveManager.save?.raw.SaveGame.player.questLog;
+			return typeof log === "object" ? log.Quest : [];
+		};
+		const rawQuest = (title: string) =>
+			rawQuests().find((q) => q._questTitle === title);
+		// Text wrapped over several lines in the markup
+		const text = (el: HTMLElement) =>
+			el.textContent?.replace(/\s+/g, " ").trim();
+		const helpWanted = (xml: string, title = "Abigail's Request") =>
+			xml.replace(
+				"</questLog>",
+				`<Quest xsi:type="ItemDeliveryQuest">
+					<_currentObjective>Bring Abigail an Amethyst.</_currentObjective>
+					<_questDescription>Abigail wants an Amethyst.</_questDescription>
+					<_questTitle>${title}</_questTitle>
+					<accepted>true</accepted>
+					<completed>false</completed>
+					<dailyQuest>true</dailyQuest>
+					<showNew>false</showNew>
+					<canBeCancelled>true</canBeCancelled>
+					<destroy>false</destroy>
+					<moneyReward>200</moneyReward>
+					<questType>3</questType>
+					<daysLeft>2</daysLeft>
+					<dayQuestAccepted>5</dayQuestAccepted>
+					<nextQuests />
+					<questTitle>${title}</questTitle>
+					<target>Abigail</target>
+					<item>(O)66</item>
+					<number>1</number>
+					<parts />
+					<dialogueparts />
+				</Quest></questLog>`,
+			);
+		const billboardQuestsDone = (xml: string, n: number) =>
+			xml.replace(
+				/(<string>BillboardQuestsDone<\/string>\s*<\/key>\s*<value>\s*<unsignedInt>)\d+/,
+				(_, before) => `${before}${n}`,
+			);
+		const reload = async (transformXml: (xml: string) => string) => {
+			harness.cleanup();
+			harness = await createPageHarness(transformXml);
+			saveManager = harness.saveManager;
+		};
+
+		it("lists the journal newest first, linking to Qi's quests", () => {
+			const { page } = renderQuests();
+			expect(
+				page.getAllByTestId("quest-title").map((el) => el.textContent),
+			).toEqual([
+				"Advancement",
+				"Raising Animals",
+				"Deeper In The Mine",
+				"Getting Started",
+				"Introductions",
+			]);
+			expect(
+				page.getByTestId("quests-qi-link").querySelector("a")?.textContent,
+			).toBe("Qi's Quests");
+			expect(
+				entry(page, "Getting Started").queryByTestId("quest-reward-pending"),
+			).toBeTruthy();
+			expect(page.queryAllByTestId("quest-reward-pending")).toHaveLength(1);
+			// Story quests have no time limit
+			expect(page.queryAllByTestId("quest-days-left")).toEqual([]);
+			// A finished quest can't be completed again
+			expect(
+				entry(page, "Getting Started").queryByTestId("quest-complete"),
+			).toBeNull();
+		});
+
+		it("completes a quest", async () => {
+			const { page, toastManager } = renderQuests();
+			await fireEvent.click(
+				entry(page, "Advancement").getByTestId("quest-complete"),
+			);
+			flushSync();
+			expect(rawQuest("Advancement")?.completed).toBe(true);
+			expect(
+				entry(page, "Advancement").queryByTestId("quest-reward-pending"),
+			).toBeTruthy();
+			expect(toastManager.toasts.map((t) => t.message)).toEqual([
+				"Completed Advancement: collect the reward from the journal in-game.",
+			]);
+
+			const introductions = entry(page, "Introductions");
+			expect(text(introductions.getByTestId("quest-follow-ups"))).toBe(
+				"Completing it starts How To Win Friends next.",
+			);
+			await fireEvent.click(introductions.getByTestId("quest-complete"));
+			flushSync();
+			expect(rawQuest("Introductions")).toBeUndefined();
+			// Its follow-up takes its place, at the top
+			expect(
+				page.getAllByTestId("quest-title").map((el) => el.textContent),
+			).toEqual([
+				"How To Win Friends",
+				"Advancement",
+				"Raising Animals",
+				"Deeper In The Mine",
+				"Getting Started",
+			]);
+			expect(rawQuest("How To Win Friends")?.showNew).toBe(true);
+			expect(toastManager.toasts.at(-1)?.message).toBe(
+				"Completed Introductions. Started How To Win Friends.",
+			);
+		});
+
+		it("warns about a follow-up it can't start", async () => {
+			await reload((xml) =>
+				xml.replace(
+					/(<_questTitle>Deeper In The Mine<\/_questTitle>[\s\S]*?<int>)18</,
+					(_, before) => `${before}9999<`,
+				),
+			);
+			const { page, toastManager } = renderQuests();
+			const mine = entry(page, "Deeper In The Mine");
+			expect(text(mine.getByTestId("quest-follow-ups-skipped"))).toBe(
+				"Finishing it in-game starts Quest #9999 next. The editor can't, so if it's completed here, that quest never starts.",
+			);
+			await fireEvent.click(mine.getByTestId("quest-complete"));
+			flushSync();
+			expect(toastManager.toasts.at(-1)?.message).toBe(
+				"Completed Deeper In The Mine. Quest #9999 won't be started: the game only starts follow-up quests when this one is finished in-game.",
+			);
+		});
+
+		it("removes a quest", async () => {
+			const { page } = renderQuests();
+			await fireEvent.click(
+				entry(page, "Deeper In The Mine").getByTestId("quest-remove"),
+			);
+			flushSync();
+			expect(rawQuests()).toHaveLength(4);
+			expect(rawQuest("Deeper In The Mine")).toBeUndefined();
+			expect(page.getAllByTestId("quest-title")).toHaveLength(4);
+		});
+
+		it("edits a quest's gold reward", async () => {
+			const { page } = renderQuests();
+			const input = entry(page, "Raising Animals").getByTestId(
+				"quest-reward",
+			) as HTMLInputElement;
+			expect(input.value).toBe("100");
+			await fireEvent.input(input, { target: { value: "750" } });
+			flushSync();
+			expect(rawQuest("Raising Animals")?.moneyReward).toBe(750);
+		});
+
+		it("edits how long a Help Wanted quest has left", async () => {
+			await reload(helpWanted);
+			const { page } = renderQuests();
+			expect(page.getByTestId("quest-help-wanted")).toBeTruthy();
+			const input = page.getByTestId("quest-days-left") as HTMLInputElement;
+			expect(input.value).toBe("2");
+			await fireEvent.input(input, { target: { value: "5" } });
+			flushSync();
+			expect(rawQuest("Abigail's Request")?.daysLeft).toBe(5);
+		});
+
+		it("refuses days left and rewards out of range", async () => {
+			await reload(helpWanted);
+			const { page } = renderQuests();
+			const days = page.getByTestId("quest-days-left") as HTMLInputElement;
+			for (const value of ["0", "100", "2.5"]) {
+				await fireEvent.input(days, { target: { value } });
+				flushSync();
+				expect(days.checkValidity()).toBe(false);
+				expect(rawQuest("Abigail's Request")?.daysLeft).toBe(2);
+			}
+			const reward = entry(page, "Abigail's Request").getByTestId(
+				"quest-reward",
+			) as HTMLInputElement;
+			for (const value of ["-5", "100000", "12.5"]) {
+				await fireEvent.input(reward, { target: { value } });
+				flushSync();
+				expect(reward.checkValidity()).toBe(false);
+				expect(rawQuest("Abigail's Request")?.moneyReward).toBe(200);
+			}
+		});
+
+		it("warns when a Prize Ticket is due but the backpack is full", async () => {
+			// Two Help Wanted quests done, so this is the third
+			await reload((xml) => billboardQuestsDone(helpWanted(xml), 2));
+			const { page, toastManager } = renderQuests();
+			const request = entry(page, "Abigail's Request");
+			expect(text(request.getByTestId("quest-prize-ticket"))).toBe(
+				"Completing it earns a Prize Ticket (every third Help Wanted quest does).",
+			);
+
+			const inventory = saveManager.save?.player.inventory;
+			if (!inventory) throw new Error("No inventory");
+			for (let i = 0; i < inventory.slotCount; i++)
+				if (!inventory.get(i)) inventory.set(i, ItemFactory.fromName("Stone"));
+			flushSync();
+			expect(text(request.getByTestId("quest-prize-ticket"))).toBe(
+				"Completing it earns a Prize Ticket, but the backpack is full: free a slot first, or the ticket is lost.",
+			);
+
+			await fireEvent.click(request.getByTestId("quest-complete"));
+			flushSync();
+			expect(toastManager.toasts.map((t) => [t.icon, t.message])).toEqual([
+				[
+					"✅",
+					"Completed Abigail's Request: collect the reward from the journal in-game.",
+				],
+				[
+					"❌",
+					"The backpack is full, so the Prize Ticket couldn't be added: free a slot and add one on the Inventory page",
+				],
+			]);
+		});
+
+		it("says when the next Help Wanted quest earns a Prize Ticket", async () => {
+			await reload((xml) =>
+				billboardQuestsDone(helpWanted(helpWanted(xml), "Emily's Request"), 1),
+			);
+			const { page } = renderQuests();
+			expect(page.queryAllByTestId("quest-prize-ticket")).toEqual([]);
+			await fireEvent.click(
+				entry(page, "Emily's Request").getByTestId("quest-complete"),
+			);
+			flushSync();
+			// Completing one makes the other the third
+			expect(
+				entry(page, "Abigail's Request").queryByTestId("quest-prize-ticket"),
+			).toBeTruthy();
+			expect(page.queryAllByTestId("quest-prize-ticket")).toHaveLength(1);
+		});
+
+		it("shows a secret quest's tag and friendship reward", async () => {
+			await reload((xml) =>
+				xml.replace(
+					"</questLog>",
+					`<Quest xsi:type="SecretLostItemQuest">
+						<_currentObjective>Return the necklace.</_currentObjective>
+						<_questDescription>Someone lost a necklace.</_questDescription>
+						<_questTitle>Lost Necklace</_questTitle>
+						<accepted>false</accepted>
+						<completed>false</completed>
+						<dailyQuest>false</dailyQuest>
+						<showNew>true</showNew>
+						<canBeCancelled>false</canBeCancelled>
+						<destroy>false</destroy>
+						<id>128</id>
+						<moneyReward>0</moneyReward>
+						<questType>9</questType>
+						<daysLeft>0</daysLeft>
+						<dayQuestAccepted>-1</dayQuestAccepted>
+						<nextQuests />
+						<questTitle>...</questTitle>
+						<npcName>Abigail</npcName>
+						<friendshipReward>100</friendshipReward>
+						<exclusiveQuestId>129</exclusiveQuestId>
+						<itemIndex>(O)191</itemIndex>
+						<itemFound>false</itemFound>
+					</Quest></questLog>`,
+				),
+			);
+			const { page } = renderQuests();
+			const necklace = entry(page, "Lost Necklace");
+			expect(necklace.getByTestId("quest-secret")).toBeTruthy();
+			expect(text(necklace.getByTestId("quest-friendship-reward"))).toBe(
+				"Reward: 100 friendship points",
+			);
+			// The reward is friendship, not gold
+			expect(necklace.queryByTestId("quest-reward")).toBeNull();
+			expect(page.queryAllByTestId("quest-secret")).toHaveLength(1);
+		});
+	});
+
+	describe("Events", () => {
+		const rawEvents = () => {
+			const events = saveManager.save?.player[Raw].eventsSeen;
+			return typeof events === "object" ? (events.int ?? []) : [];
+		};
+		// An event's checkbox in each group it's listed in
+		const checkbox = (
+			page: { queryAllByTestId: (id: string) => HTMLElement[] },
+			id: string,
+		) => page.queryAllByTestId(`event-${id}`) as HTMLInputElement[];
+		const names = (page: { queryAllByTestId: (id: string) => HTMLElement[] }) =>
+			page.queryAllByTestId("event-name").map((n) => n.textContent);
+
+		it("names seen events and toggles them", async () => {
+			const page = harness.render(eventsPage);
+			expect(page.getByTestId("events-seen-count").textContent).toBe(
+				"Events seen: 3",
+			);
+			const [willy] = checkbox(page, "739330");
+			expect(willy?.checked).toBe(true);
+			expect(
+				page.getByText(
+					"Willy's introduction event where he gives the farmer a fishing rod",
+				),
+			).toBeTruthy();
+
+			if (!willy) throw new Error("No checkbox for event 739330");
+			await fireEvent.click(willy);
+			flushSync();
+			expect(saveManager.save?.player.eventsSeen.has("739330")).toBe(false);
+			expect(rawEvents()).not.toContain("739330");
+			expect(willy.checked).toBe(false);
+
+			const [abigail] = checkbox(page, "1");
+			if (!abigail) throw new Error("No checkbox for event 1");
+			expect(abigail.checked).toBe(false);
+			await fireEvent.click(abigail);
+			flushSync();
+			expect(rawEvents()).toEqual(["60367", "100162", "1"]);
+		});
+
+		it("shows an event under each of its characters, ticked together", async () => {
+			const page = harness.render(eventsPage);
+			// The introduction event is Lewis and Robin's
+			const intro = checkbox(page, "60367");
+			expect(intro).toHaveLength(2);
+			expect(intro.every((box) => box.checked)).toBe(true);
+			if (!intro[0]) throw new Error("No checkbox for event 60367");
+			await fireEvent.click(intro[0]);
+			flushSync();
+			expect(intro.every((box) => !box.checked)).toBe(true);
+			expect(rawEvents()).not.toContain("60367");
+		});
+
+		it("searches, groups by location and filters by seen", async () => {
+			const page = harness.render(eventsPage);
+			const search = page.getByTestId("events-search");
+			await fireEvent.input(search, { target: { value: "prairie" } });
+			expect(names(page)).toEqual(["Abigail's 2 heart event"]);
+
+			await fireEvent.input(search, { target: { value: "zzzz" } });
+			expect(names(page)).toEqual([]);
+			expect(page.getByText('No events match "zzzz".')).toBeTruthy();
+			await fireEvent.input(search, { target: { value: "" } });
+
+			const groups = () =>
+				page.queryAllByTestId("event-group-name").map((n) => n.textContent);
+			expect(groups()).toContain("Abigail");
+			expect(groups().at(-1)).toBe("Other");
+			await choose(page.getByTestId("events-group"), "location");
+			expect(groups()).toContain("Pierre's General Store");
+			expect(groups()).not.toContain("Abigail");
+
+			await choose(page.getByTestId("events-show"), "seen");
+			const shown = page
+				.getAllByTestId("event-row")
+				.map((row) => row.querySelector("input") as HTMLInputElement);
+			expect(shown).toHaveLength(3);
+			expect(shown.every((box) => box.checked)).toBe(true);
+
+			await choose(page.getByTestId("events-show"), "unseen");
+			expect(page.queryAllByTestId("event-60367")).toHaveLength(0);
+			expect(page.getAllByTestId("event-1")).toHaveLength(1);
+		});
+
+		it("adds and removes an unlisted event ID", async () => {
+			const page = harness.render(eventsPage);
+			const input = page.getByTestId("event-id-input");
+			const add = page.getByTestId("add-event") as HTMLButtonElement;
+			expect(add.disabled).toBe(true);
+			await fireEvent.input(input, { target: { value: "Bad Id" } });
+			expect(add.disabled).toBe(true);
+			await fireEvent.input(input, { target: { value: "a/b" } });
+			expect(add.disabled).toBe(true);
+			expect(page.getByTestId("event-id-hint").textContent).toBe(
+				`Event IDs can't contain spaces or "/".`,
+			);
+			// The save would read it back as 1000
+			await fireEvent.input(input, { target: { value: "1e3" } });
+			expect(add.disabled).toBe(true);
+			expect(page.getByTestId("event-id-hint").textContent).toContain(
+				'the save reads "1e3" back as a different ID',
+			);
+
+			await fireEvent.input(input, {
+				target: { value: " Example.ModId_Event " },
+			});
+			expect(add.disabled).toBe(false);
+			await fireEvent.click(add);
+			flushSync();
+			expect(page.getAllByTestId("unknown-event")).toHaveLength(1);
+			expect(page.getByText("Example.ModId_Event")).toBeTruthy();
+			expect(rawEvents()).toContain("Example.ModId_Event");
+			expect(page.getByTestId("event-added").textContent).toBe(
+				"Marked #Example.ModId_Event as seen.",
+			);
+			expect((input as HTMLInputElement).value).toBe("");
+
+			await fireEvent.click(
+				page.getByTestId("remove-event-Example.ModId_Event"),
+			);
+			flushSync();
+			expect(page.queryAllByTestId("unknown-event")).toHaveLength(0);
+			expect(rawEvents()).not.toContain("Example.ModId_Event");
+			expect(page.queryByTestId("event-added")).toBeNull();
+		});
+
+		it("ticks a vanilla event added by ID", async () => {
+			const page = harness.render(eventsPage);
+			// Saved as 1, which is how the save reads it back
+			await fireEvent.input(page.getByTestId("event-id-input"), {
+				target: { value: "01" },
+			});
+			expect(page.getByTestId("event-id-hint").textContent).toBe(
+				"Saved as 1, without the leading zeros.",
+			);
+			await fireEvent.click(page.getByTestId("add-event"));
+			flushSync();
+			const [abigail] = checkbox(page, "1");
+			expect(abigail?.checked).toBe(true);
+			expect(rawEvents()).toContain("1");
+			expect(page.queryAllByTestId("unknown-event")).toHaveLength(0);
+			expect(page.getByTestId("event-added").textContent).toBe(
+				"Marked Abigail's 2 heart event (#1) as seen.",
+			);
+
+			// Unticking it makes the message out of date
+			if (!abigail) throw new Error("No checkbox for event 1");
+			await fireEvent.click(abigail);
+			flushSync();
+			expect(page.queryByTestId("event-added")).toBeNull();
+		});
+
+		it("clears the add message when switching farmers", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) => {
+				const start = xml.indexOf("<player>") + "<player>".length;
+				const farmhand = xml
+					.slice(start, xml.indexOf("</player>"))
+					.replace("<name>Test</name>", "<name>Hand</name>")
+					.replace(
+						/<UniqueMultiplayerID>\d+<\/UniqueMultiplayerID>/,
+						"<UniqueMultiplayerID>123456789</UniqueMultiplayerID>",
+					)
+					.replace(/<eventsSeen>[\s\S]*?<\/eventsSeen>/, "<eventsSeen />");
+				return xml.replace(
+					"<farmhands />",
+					`<farmhands><Farmer>${farmhand}</Farmer></farmhands>`,
+				);
+			});
+			saveManager = harness.saveManager;
+			const page = harness.render(eventsPage);
+			await fireEvent.input(page.getByTestId("event-id-input"), {
+				target: { value: "1" },
+			});
+			await fireEvent.click(page.getByTestId("add-event"));
+			flushSync();
+			expect(page.getByTestId("event-added")).toBeTruthy();
+
+			saveManager.save?.nextFarmer();
+			flushSync();
+			expect(saveManager.save?.player.name).toBe("Hand");
+			expect(page.getByTestId("events-seen-count").textContent).toBe(
+				"Events seen: 0",
+			);
+			expect(page.queryByTestId("event-added")).toBeNull();
+		});
+	});
+});
+
+describe("Animal buildings", () => {
+	mockIDB();
+	let harness!: PageHarness;
+
+	beforeEach(async () => {
+		harness = await createPageHarness(withAnimalBuildings);
+	});
+
+	afterEach(() => {
+		harness.cleanup();
+	});
+
+	const building = (id: string) => {
+		const found = harness.saveManager.save?.farm?.buildings.find(
+			(b) => b[Raw].id === id,
+		);
+		if (!found) throw new Error(`No building ${id}`);
+		return found;
+	};
+
+	/** The section for a building, found by its heading */
+	const section = (page: { container: HTMLElement }, name: string) => {
+		const heading = within(page.container).getByRole("heading", {
+			level: 3,
+			name,
+		});
+		const row = heading.closest(".building-row");
+		if (!(row instanceof HTMLElement)) throw new Error(`No ${name} section`);
+		return { row, header: heading.closest(".building-header") as HTMLElement };
+	};
+
+	it("shows the controls under each coop and barn's heading", () => {
+		const page = harness.render(buildingsPage);
+		for (const name of ["Coop", "Barn"]) {
+			const { header } = section(page, name);
+			expect(within(header).getByTestId("building-upgrade")).toBeTruthy();
+			expect(within(header).getByTestId("add-animal-type")).toBeTruthy();
+		}
+		expect(
+			within(section(page, "Coop").header).getByTestId("building-residents")
+				.textContent,
+		).toMatch(/4\/4 animals\s+live here \(1 outside\)/);
+		// Other buildings don't get them
+		expect(page.getAllByTestId("building-upgrade")).toHaveLength(2);
+
+		const types = within(section(page, "Barn").header).getByTestId(
+			"add-animal-type",
+		) as HTMLSelectElement;
+		const options = [...types.options].map((o) => [o.value, o.disabled]);
+		expect(options).toEqual([
+			["White Cow", false],
+			["Brown Cow", false],
+			["Goat", true],
+			["Sheep", true],
+			["Pig", true],
+			["Ostrich", false],
+		]);
+		expect(types.options[2]?.textContent).toBe("Goat (needs a Big Barn)");
+	});
+
+	it("adds an animal from the form", async () => {
+		const page = harness.render(buildingsPage);
+		const { row, header } = section(page, "Barn");
+		const name = within(header).getByTestId(
+			"add-animal-name",
+		) as HTMLInputElement;
+		expect(name.value).toBe("White Cow");
+
+		await choose(within(header).getByTestId("add-animal-type"), "Ostrich");
+		expect(name.value).toBe("Ostrich");
+		await fireEvent.input(name, { target: { value: "Big Bird" } });
+		const submit = within(header).getByTestId(
+			"add-animal-submit",
+		) as HTMLButtonElement;
+		expect(submit.disabled).toBe(false);
+		await fireEvent.submit(submit.closest("form") as HTMLFormElement);
+		flushSync();
+
+		expect(within(row).getByText("Big Bird")).toBeTruthy();
+		expect(building(BARN_ID).residentIds).toHaveLength(3);
+		expect(
+			within(header).getByTestId("building-residents").textContent,
+		).toMatch(/3\/4 animals\s+live here/);
+		// Ready for another of the same kind
+		expect(name.value).toBe("Ostrich");
+	});
+
+	it("won't take a name another animal has", async () => {
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Barn");
+		const name = within(header).getByTestId("add-animal-name");
+		await fireEvent.input(name, { target: { value: "Clucky" } });
+		expect(
+			(within(header).getByTestId("add-animal-submit") as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+		expect(
+			within(header).getByTestId("add-animal-name-error").textContent,
+		).toBe("Another animal is already called Clucky");
+	});
+
+	it("says when a building is full", () => {
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Coop");
+		expect(
+			(within(header).getByTestId("add-animal-submit") as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+		expect(within(header).getByTestId("add-animal-full").textContent).toBe(
+			"Full: 4/4 animals live here. Upgrade it for more room.",
+		);
+	});
+
+	it("upgrades a coop from the dropdown", async () => {
+		const page = harness.render(buildingsPage);
+		const select = within(section(page, "Coop").header).getByTestId(
+			"building-upgrade",
+		) as HTMLSelectElement;
+		expect([...select.options].map((o) => o.textContent)).toEqual([
+			"Coop (4 animals)",
+			"Big Coop (8 animals)",
+			"Deluxe Coop (12 animals)",
+		]);
+
+		await choose(select, "Big Coop");
+		flushSync();
+
+		expect(building(COOP_ID)[Raw].buildingType).toBe("Big Coop");
+		const { header } = section(page, "Big Coop");
+		expect(
+			within(header).getByTestId("building-residents").textContent,
+		).toMatch(/4\/8 animals\s+live here/);
+		expect(within(header).queryByTestId("add-animal-full")).toBeNull();
+		const types = within(header).getByTestId(
+			"add-animal-type",
+		) as HTMLSelectElement;
+		expect([...types.options].find((o) => o.value === "Duck")?.disabled).toBe(
+			false,
+		);
+	});
+
+	it("only offers a downgrade the animals fit into", async () => {
+		const coop = building(COOP_ID);
+		const big = coop.tiers.find((t) => t.name === "Big Coop");
+		if (!big) throw new Error("No Big Coop");
+		coop.changeType(big);
+		const player = harness.saveManager.save?.player;
+		if (!player) throw new Error("No player");
+		coop.adoptAnimal("Duck", "Daffy", player);
+		coop.adoptAnimal("White Chicken", "Pip", player);
+		flushSync();
+
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Big Coop");
+		const select = within(header).getByTestId(
+			"building-upgrade",
+		) as HTMLSelectElement;
+		expect(select.value).toBe("Big Coop");
+		expect(select.options[0]?.disabled).toBe(true);
+		expect(select.options[2]?.disabled).toBe(false);
+		expect(
+			within(header).getByTestId("building-upgrade-reason").textContent,
+		).toBe("6 animals live here; a Coop holds 4");
+
+		// Even if it's picked anyway, nothing changes
+		await choose(select, "Coop");
+		expect(coop[Raw].buildingType).toBe("Big Coop");
+		expect(select.value).toBe("Big Coop");
+	});
+
+	it("warns about a downgrade, and says what it left behind", async () => {
+		const coop = building(COOP_ID);
+		const big = coop.tiers.find((t) => t.name === "Big Coop");
+		if (!big) throw new Error("No Big Coop");
+		coop.changeType(big);
+		// An egg in the incubator keeps it there, so the junimo can't go back
+		const incubator = coop.indoorLocation?.[Raw].objects?.item.find(
+			(o) => o.value.Object.name === "Incubator",
+		)?.value.Object as { heldObject?: unknown } | undefined;
+		if (!incubator) throw new Error("No incubator");
+		incubator.heldObject = { name: "Egg", itemId: "176" };
+		flushSync();
+
+		const toastManager = new ToastManager();
+		const addSpy = vi.spyOn(toastManager, "add");
+		const page = harness.render(buildingsPage, {
+			context: setToastManagerContext(toastManager),
+		});
+		const { header } = section(page, "Big Coop");
+		expect(
+			within(header).getByTestId("building-downgrade-note").textContent,
+		).toMatch(/^A downgrade moves back what the upgrade moved\./);
+
+		await choose(within(header).getByTestId("building-upgrade"), "Coop");
+		expect(coop[Raw].buildingType).toBe("Coop");
+		expect(
+			addSpy.mock.calls.map(([toast]) => [toast.icon, toast.message]),
+		).toEqual([
+			["✅", "Downgraded to a Coop"],
+			["❌", "Left the Incubator at 2, 3: it has something in it"],
+			["❌", "Left the Stone Junimo at 14, 8: its old spot is taken"],
+		]);
+		// Nothing smaller to go to
+		expect(
+			within(section(page, "Coop").header).queryByTestId(
+				"building-downgrade-note",
+			),
+		).toBeNull();
+	});
+
+	it("says when a building is still being built", async () => {
+		harness.cleanup();
+		harness = await createPageHarness((xml) =>
+			withAnimalBuildings(xml, [
+				coopXml(),
+				barnXml({ daysOfConstructionLeft: 2 }),
+			]),
+		);
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Barn");
+		expect(
+			within(header).getByTestId("add-animal-under-construction").textContent,
+		).toBe("Animals can move in once it's built.");
+		expect(
+			(within(header).getByTestId("add-animal-submit") as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+		const select = within(header).getByTestId(
+			"building-upgrade",
+		) as HTMLSelectElement;
+		expect([...select.options].map((o) => [o.value, o.disabled])).toEqual([
+			["Barn", false],
+			["Big Barn", true],
+			["Deluxe Barn", true],
+		]);
+		expect(
+			within(header).getByTestId("building-upgrade-reason").textContent,
+		).toBe("The Barn is still being built");
+	});
+
+	it("offers a shed's upgrade, but no animals", async () => {
+		harness.cleanup();
+		harness = await createPageHarness((xml) =>
+			withAnimalBuildings(xml, [coopXml(), barnXml(), shedXml()]),
+		);
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Shed");
+		const select = within(header).getByTestId(
+			"building-upgrade",
+		) as HTMLSelectElement;
+		expect([...select.options].map((o) => o.textContent)).toEqual([
+			"Shed",
+			"Big Shed",
+		]);
+		expect(within(header).queryByTestId("add-animal-type")).toBeNull();
+		expect(within(header).queryByTestId("building-residents")).toBeNull();
+
+		await choose(select, "Big Shed");
+		flushSync();
+		expect(building(SHED_ID)[Raw].buildingType).toBe("Big Shed");
+		expect(
+			within(section(page, "Big Shed").header).getByTestId(
+				"building-downgrade-note",
+			),
+		).toBeTruthy();
+	});
+
+	it("says when it doesn't know what lives in a building", async () => {
+		harness.cleanup();
+		harness = await createPageHarness((xml) =>
+			withAnimalBuildings(xml, [coopXml({ type: "Fancy Coop" }), barnXml()]),
+		);
+		const page = harness.render(buildingsPage);
+		const { header } = section(page, "Fancy Coop");
+		expect(within(header).getByTestId("add-animal-unknown").textContent).toBe(
+			"The editor doesn't know which animals can live in a Fancy Coop.",
+		);
+		expect(within(header).queryByTestId("add-animal-type")).toBeNull();
+		expect(within(header).queryByTestId("building-upgrade")).toBeNull();
+		expect(
+			within(header).getByTestId("building-residents").textContent,
+		).toMatch(/4\/4 animals\s+live here/);
+	});
+
+	/** An animal's card, found by its name */
+	const animalCard = (page: { container: HTMLElement }, name: string) => {
+		const heading = within(page.container).getByRole("heading", {
+			level: 4,
+			name,
+		});
+		return heading.closest(".animal-card") as HTMLElement;
+	};
+
+	it("toggles pregnancy and the Golden Animal Cracker per animal", async () => {
+		const page = harness.render(buildingsPage);
+		const card = (name: string) => animalCard(page, name);
+		const raw = (id: string) =>
+			harness.saveManager.save?.farmAnimals.find(
+				(a) => String(a[Raw].key.long) === id,
+			)?.[Raw].value.FarmAnimal;
+
+		// Only animals that can get pregnant get the toggle
+		const daisy = card("Daisy");
+		expect(
+			within(card("Clucky")).queryByTestId("animal-allow-pregnancy"),
+		).toBeNull();
+		expect(
+			within(card("Clucky")).getByTestId("animal-golden-cracker"),
+		).toBeTruthy();
+
+		const pregnancy = within(daisy).getByTestId(
+			"animal-allow-pregnancy",
+		) as HTMLInputElement;
+		expect(pregnancy.checked).toBe(true);
+		await fireEvent.click(pregnancy);
+		flushSync();
+		expect(raw(BARN_ANIMALS.daisy)?.allowReproduction).toBe(false);
+
+		const cracker = within(daisy).getByTestId(
+			"animal-golden-cracker",
+		) as HTMLInputElement;
+		expect(cracker.checked).toBe(false);
+		await fireEvent.click(cracker);
+		flushSync();
+		expect(raw(BARN_ANIMALS.daisy)?.hasEatenAnimalCracker).toBe(true);
+		expect(raw(BARN_ANIMALS.bessie)?.hasEatenAnimalCracker).toBe(false);
+	});
+
+	it("doesn't offer pigs a Golden Animal Cracker", () => {
+		const barn = building(BARN_ID);
+		const deluxe = barn.tiers.find((t) => t.name === "Deluxe Barn");
+		if (!deluxe) throw new Error("No Deluxe Barn");
+		barn.changeType(deluxe);
+		const player = harness.saveManager.save?.player;
+		if (!player) throw new Error("No player");
+		barn.adoptAnimal("Pig", "Truffles", player);
+		flushSync();
+
+		const page = harness.render(buildingsPage);
+		const truffles = animalCard(page, "Truffles");
+		expect(within(truffles).getByTestId("animal-allow-pregnancy")).toBeTruthy();
+		expect(within(truffles).queryByTestId("animal-golden-cracker")).toBeNull();
 	});
 });
