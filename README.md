@@ -47,6 +47,11 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - Mark quests complete as the game does (gold waits in the journal to collect in-game, the next
     story quest starts, and Help Wanted quests count toward Prize Tickets), or remove them
   - Change a quest's gold reward, and how many days a Help Wanted quest has left
+- ✅ Event management
+  - See which events (cutscenes) each farmer has seen, named from the
+    [List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)
+  - Untick a heart event to watch it again, or tick a cutscene to skip it
+  - Search, group by villager or location, and add or remove any event ID (e.g. from mods)
 - ✅ Save Management
   - Switch between farmhands
   - Automatic save backups
@@ -57,9 +62,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 - 🔄 Fill gaps in existing menus
   - Audit each menu against the save data for editable fields not yet exposed
     (e.g. is a tool's weight stored in the save, and can it be edited?)
-- 🔄 Event management
-  - View and edit which events the player has seen (the save's `eventsSeen` list), e.g. to replay heart events or skip cutscenes
-  - Name each event using the [List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)
 - 🔄 Full code and security review of this fork
 
 ## Usage

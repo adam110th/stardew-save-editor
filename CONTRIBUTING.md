@@ -34,6 +34,13 @@ from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
 `generated/quests.json` is `Data/Quests`, parsed by `codegen/quests.ts` the way the game reads it
 (`Quest.getQuestFromId`), so completing a story quest in the editor can start the next one.
 
+Some data isn't in the game's files, so it comes from the wikis instead. `npm run dump:villagers`
+refreshes `generated/villagers.json` (descriptions and loved gifts, from the
+[Stardew Valley Wiki](https://stardewvalleywiki.com)) and `npm run dump:events` refreshes
+`generated/events.json` (event names, from the Stardew Modding Wiki's
+[List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)). They need
+`curl` rather than the `content` folder; run `npm run format` afterwards.
+
 The festival dates and weather rules in `src/lib/calendar.ts` aren't generated: they're written from
 `Data/Festivals/FestivalDates`, `Data/PassiveFestivals` and the game's weather code
 (`Game1.getWeatherModificationsForDate`, `LocationWeather`, `Utility.isGreenRainDay`), so check them
