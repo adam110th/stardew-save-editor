@@ -57,7 +57,7 @@ export interface Save {
 	mine_lowestLevelReached: number;
 	/** A weather ID like `Sun` or `Rain` (see `$lib/calendar`) */
 	weatherForTomorrow: string;
-	whichFarm: number;
+	whichFarm: number | string;
 	mine_lowestLevelReachedForOrder: number;
 	skullCavesDifficulty: number;
 	minesDifficulty: number;

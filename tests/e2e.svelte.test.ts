@@ -1298,6 +1298,25 @@ describe("Save Manager Integration Tests", () => {
 				"Festival",
 			);
 		});
+
+		it("names Meadowlands by its farm type ID", async () => {
+			// 1.6 saves Meadowlands and modded farms by ID instead of an index
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace(
+					"<whichFarm>3</whichFarm>",
+					"<whichFarm>MeadowlandsFarm</whichFarm>",
+				),
+			);
+			saveManager = harness.saveManager;
+			expect(saveManager.save?.raw.SaveGame.whichFarm).toBe("MeadowlandsFarm");
+
+			const page = harness.render(farmPage);
+			const values = page
+				.getAllByTestId("locked-setting")
+				.map((el) => el.textContent);
+			expect(values).toContain("Meadowlands");
+		});
 	});
 
 	describe("Inventory sorting and Secret Notes", () => {
