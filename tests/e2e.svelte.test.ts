@@ -1275,6 +1275,23 @@ describe("Save Manager Integration Tests", () => {
 			}
 		});
 
+		it("resets a cleared profit margin to normal", async () => {
+			const page = harness.render(farmPage);
+			const save = saveManager.save;
+			if (!save) return;
+			const input = page.getByTestId("profit-margin") as HTMLInputElement;
+
+			await fireEvent.input(input, { target: { value: "50" } });
+			await fireEvent.input(input, { target: { value: "" } });
+			flushSync();
+			// Nothing is written while the field is empty
+			expect(save.players[0]?.raw.difficultyModifier).toBe(0.5);
+
+			await fireEvent.blur(input);
+			flushSync();
+			expect(save.players[0]?.raw.difficultyModifier).toBe(1);
+		});
+
 		it("edits monster spawning and mine rewards", async () => {
 			const page = harness.render(farmPage);
 			const game = saveManager.save?.raw.SaveGame;

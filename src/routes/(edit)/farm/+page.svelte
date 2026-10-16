@@ -43,23 +43,23 @@
 		],
 		[
 			"Community Center bundles",
-			"Set at creation",
-			"The chosen bundles are already saved. Edit individual bundles on the Community Center page instead.",
+			"Not recorded",
+			"The save keeps the bundles this option picked, not the option itself. Bundle progress can be edited on the Community Center page.",
 		],
 		[
 			"Guarantee Year 1 completable",
-			game.visitsUntilY1Guarantee >= 0 ? "On" : "Off",
-			"Tracked by a Traveling Cart visit counter the game manages.",
+			game.visitsUntilY1Guarantee >= 0 ? "On" : "Off, or already used",
+			"The save only keeps a countdown of Traveling Cart visits to the one that sells Red Cabbage seeds, and the game stops it after that visit.",
 		],
 		[
 			"Money",
 			game.player.useSeparateWallets ? "Separate wallets" : "Shared",
-			"Change this in-game with the ledger in the Mayor's Manor, which correctly splits or merges everyone's gold.",
+			"The host can change this in-game with the ledger in the Mayor's Manor, which splits or merges everyone's gold overnight.",
 		],
 		[
 			"Random seed",
 			String(game.uniqueIDForThisGame),
-			"The save's folder and file name include this number. Changing it breaks the save.",
+			"The save's folder and file are named after this number, so the game would save to a new folder. It also seeds much of the game's randomness.",
 		],
 		[
 			"Legacy randomization",
@@ -94,6 +94,7 @@
 					max="1000"
 					step="1"
 					list="profit-margin-presets"
+					defaultValue={100}
 					bind:value={() => Math.round((host?.difficultyModifier ?? 1) * 100),
 					(v) => {
 						// Cleared while typing: wait for a number
@@ -112,8 +113,9 @@
 			</datalist>
 		</label>
 		<small
-			>Multiplies the price of items you sell and seeds you buy. 100% is normal;
-			the game offers 75%, 50% and 25%, but any value works.</small
+			>Multiplies the price of items you sell, and of seeds and saplings in
+			shops. 100% is normal and the game offers 75%, 50% and 25%, but other
+			values work too.</small
 		>
 		<label>
 			Spawn Monsters on the Farm
@@ -122,7 +124,10 @@
 				data-testid="spawn-monsters"
 			/>
 		</label>
-		<small>Takes effect from the next night.</small>
+		<small
+			>Monsters can appear on the farm from 7pm. In the game, the Dark Shrine of
+			Night Terrors in the Witch's Hut toggles this too.</small
+		>
 		<label>
 			Mine Rewards
 			<UiSelect
