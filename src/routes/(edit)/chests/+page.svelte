@@ -1,4 +1,11 @@
 <script lang="ts">
+	import {
+		type ChestGroupId,
+		ChestGroups,
+		chestColor,
+		chestGroup,
+	} from "$lib/chestGroups";
+	import type { ChestProxy } from "$lib/proxies/Chest.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
 	import {
@@ -7,7 +14,6 @@
 		setItemQuality,
 	} from "$lib/setItemQuality";
 	import { getToastManager, Toast } from "$lib/ToastManager.svelte";
-	import UiCheckbox from "$lib/ui/UICheckbox.svelte";
 	import UiContainer from "$lib/ui/UIContainer.svelte";
 	import UiSelect from "$lib/ui/UISelect.svelte";
 	import ItemSlot from "../inventory/ItemSlot.svelte";
@@ -18,21 +24,66 @@
 	const save = getSaveManager().save;
 	if (!save) throw new Error("No save data found");
 
-	let selectedChestIndex = $state(0);
-	let selectedIndex = $state(0);
-	let selectedChest = $derived(save.chests[selectedChestIndex]);
-	let selectedItem = $derived(selectedChest?.inventory.get(selectedIndex));
-	let gridSlots = $derived(
-		selectedChest
-			? Array.from(
-					{ length: selectedChest.inventory.slotCount },
-					(_, index) => ({
-						index,
-						item: selectedChest?.inventory.get(index),
-					}),
-				)
-			: [],
+	// Each group lists all of its chests at once
+	const groups = $derived(
+		ChestGroups.map((group) => ({
+			...group,
+			chests: save.chests.filter((chest) => chestGroup(chest) === group.id),
+		})),
 	);
+
+	let selectedGroupId = $state<ChestGroupId>("chests");
+	let selectedGroup = $derived(
+		groups.find((g) => g.id === selectedGroupId) ?? groups[0],
+	);
+
+	let selectedChest = $state<ChestProxy | undefined>(
+		save.chests.find((chest) => chestGroup(chest) === "chests"),
+	);
+	let selectedIndex = $state(0);
+	let selectedItem = $derived(selectedChest?.inventory.get(selectedIndex));
+
+	let chestList = $state<HTMLElement>();
+
+	const selectGroup = (id: ChestGroupId) => {
+		selectedGroupId = id;
+		if (chestList) chestList.scrollTop = 0;
+		selectedChest = groups.find((g) => g.id === id)?.chests[0];
+		selectedIndex = 0;
+	};
+
+	const select = (chest: ChestProxy, index: number) => {
+		selectedChest = chest;
+		selectedIndex = index;
+	};
+
+	const slots = (chest: ChestProxy) =>
+		Array.from({ length: chest.inventory.slotCount }, (_, index) => ({
+			index,
+			item: chest.inventory.get(index),
+		}));
+
+	/** Section headings; chests with the same label get a number to tell them apart */
+	const headings = $derived.by(() => {
+		const result = new Map<ChestProxy, string>();
+		const seen = new Map<string, number>();
+		const counts = new Map<string, number>();
+		for (const chest of selectedGroup?.chests ?? [])
+			counts.set(
+				chest.metadata.label,
+				(counts.get(chest.metadata.label) ?? 0) + 1,
+			);
+		for (const chest of selectedGroup?.chests ?? []) {
+			const label = chest.metadata.label;
+			const n = (seen.get(label) ?? 0) + 1;
+			seen.set(label, n);
+			result.set(
+				chest,
+				(counts.get(label) ?? 0) > 1 ? `${label} #${n}` : label,
+			);
+		}
+		return result;
+	});
 
 	const createItem = (name: string) => {
 		if (!selectedChest) return;
@@ -52,20 +103,17 @@
 
 	const deleteItem = () => selectedChest?.inventory.delete(selectedIndex);
 
-	let applyToAllChests = $state(false);
-
-	/** Set every item that can have a quality to `quality`, in this chest or all of them */
+	/** Set every item that can have a quality to `quality`, in every chest listed */
 	const setAllQuality = (quality: number, name: string) => {
-		const chests = applyToAllChests ? save.chests : [selectedChest];
 		let changed = 0;
-		for (const chest of chests) {
-			for (const item of chest?.inventory.values() ?? []) {
+		for (const chest of selectedGroup?.chests ?? []) {
+			for (const item of chest.inventory.values()) {
 				if (!item || !canHaveQuality(item)) continue;
 				setItemQuality(item, quality);
 				changed++;
 			}
 		}
-		const where = applyToAllChests ? "all chests" : "this chest";
+		const where = selectedGroup?.name.toLowerCase() ?? "these chests";
 		toastManager.add(
 			changed
 				? new Toast(
@@ -81,26 +129,26 @@
 	<UiContainer>
 		<p>No editable chests were found in this save.</p>
 	</UiContainer>
-{:else if selectedChest}
+{:else}
 	<UiContainer>
 		<h3>Chests</h3>
 		<label class="picker">
-			<span hidden>Container</span>
+			<span hidden>Container group</span>
 			<UiSelect
-				bind:value={selectedChestIndex}
-				onchange={() => (selectedIndex = 0)}
+				value={selectedGroupId}
+				onchange={(e) =>
+					selectGroup(
+						(e.currentTarget as HTMLSelectElement).value as ChestGroupId,
+					)}
+				data-testid="chest-group"
 			>
-				{#each save.chests as chest, index}
-					<option value={index}>{chest.metadata.label}</option>
+				{#each groups as group (group.id)}
+					<option value={group.id}>{group.name} ({group.chests.length})</option>
 				{/each}
 			</UiSelect>
 		</label>
-		<small>
-			{selectedChest.inventory.usedSlots} / {selectedChest.inventory.slotCount}
-			occupied slots
-		</small>
 		<div class="bulk-quality" data-testid="chest-bulk-quality">
-			<small>Change all item quality:</small>
+			<small>Change the quality of every item listed:</small>
 			<div class="stars">
 				{#each QualityLevels as { quality, name }}
 					<button
@@ -115,35 +163,58 @@
 					</button>
 				{/each}
 			</div>
-			<label class="all-chests">
-				<UiCheckbox
-					bind:checked={applyToAllChests}
-					data-testid="chest-quality-all"
-				/>
-				<small>Apply to all chests</small>
-			</label>
 		</div>
 	</UiContainer>
 
 	<UiContainer>
-		<div class="item-grid">
-			{#each gridSlots as { index, item }}
-				<ItemSlot
-					active={index === selectedIndex}
-					data-testid={`chest-item-${index}`}
-					onclick={() => (selectedIndex = index)}
+		<div class="chest-list" data-testid="chest-list" bind:this={chestList}>
+			{#each selectedGroup?.chests ?? [] as chest (chest.metadata.id)}
+				{@const color = chestColor(chest)}
+				{@const chestIndex = save.chests.indexOf(chest)}
+				<section
+					class="chest"
+					class:colored={color}
+					style:--chest-color={color?.css}
+					data-testid="chest-section"
 				>
-					<div class="item">
-						<ItemSprite {item} />
+					<header>
+						<h4>{headings.get(chest)}</h4>
+						<small>
+							{chest.inventory.usedSlots} / {chest.inventory.slotCount} occupied
+							slots
+						</small>
+					</header>
+					<div class="item-grid">
+						{#each slots(chest) as { index, item }}
+							<ItemSlot
+								active={chest === selectedChest && index === selectedIndex}
+								data-testid={`chest-${chestIndex}-item-${index}`}
+								onclick={() => select(chest, index)}
+							>
+								<div class="item">
+									<ItemSprite {item} />
+								</div>
+							</ItemSlot>
+						{/each}
 					</div>
-				</ItemSlot>
+				</section>
+			{:else}
+				<p class="empty">
+					No {selectedGroup?.name.toLowerCase()} in this save.
+				</p>
 			{/each}
 		</div>
 	</UiContainer>
 
-	<UiContainer>
-		<ItemView {selectedItem} {selectedIndex} {createItem} {deleteItem} />
-	</UiContainer>
+	{#if selectedChest}
+		<UiContainer>
+			<small class="editing"
+				>Editing: {headings.get(selectedChest) ??
+					selectedChest.metadata.label}</small
+			>
+			<ItemView {selectedItem} {selectedIndex} {createItem} {deleteItem} />
+		</UiContainer>
+	{/if}
 {/if}
 
 <style>
@@ -198,11 +269,49 @@
 		color: #b56cff;
 	}
 
-	.all-chests {
+	/* All the group's chests, scrolling within a 1920x1080 screen */
+	.chest-list {
 		display: flex;
-		align-items: center;
-		gap: 6px;
-		cursor: pointer;
+		flex-direction: column;
+		gap: 10px;
+		max-height: max(20rem, calc(100dvh - 590px));
+		overflow-y: auto;
+		padding-right: 4px;
+	}
+
+	.chest {
+		padding: 6px 8px 8px;
+		border-radius: 6px;
+		border: 2px solid #b14e0544;
+		background: #fff3dc66;
+	}
+
+	/* Tinted with the colour picked for the chest in-game */
+	.chest.colored {
+		border-color: var(--chest-color);
+		background: color-mix(in srgb, var(--chest-color) 45%, #ffe7c2);
+	}
+
+	.chest header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 8px;
+		margin-bottom: 4px;
+	}
+
+	.chest h4 {
+		margin: 0;
+	}
+
+	.empty {
+		opacity: 0.7;
+	}
+
+	.editing {
+		display: block;
+		margin-bottom: 4px;
+		opacity: 0.8;
 	}
 
 	.item-grid {
