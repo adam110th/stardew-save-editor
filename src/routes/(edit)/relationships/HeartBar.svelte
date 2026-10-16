@@ -56,10 +56,8 @@
 			<strong data-testid="friendship-name">{name}</strong>
 		</div>
 		{#if info?.description}
-			<small
-				class="description"
-				title={info.description}
-				data-testid="friendship-description">{info.description}</small
+			<small class="description" data-testid="friendship-description"
+				>{info.description}</small
 			>
 		{/if}
 
@@ -144,12 +142,6 @@
 	.description {
 		font-size: 0.75em;
 		opacity: 0.8;
-		/* Keep rows a steady height; the full text is in the tooltip */
-		display: -webkit-box;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
-		overflow: hidden;
 	}
 
 	.loves {
