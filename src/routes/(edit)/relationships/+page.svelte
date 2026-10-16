@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from "svelte";
 	import { lovedGiftNames } from "$lib/LovedGifts";
 	import { characters } from "$lib/NPCs";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
@@ -11,7 +12,13 @@
 	const save = getSaveManager().save;
 	if (!save) throw new Error("No save data found");
 	const player = $derived(save.player);
-	const friendships = $derived(Array.from(player.friendships));
+	// Sorted by points, but only when villagers are added or the farmer changes:
+	// re-sorting as points are edited would move the row being typed in, losing focus
+	const friendships = $derived.by(() => {
+		const all = player.friendships;
+		if (all.size === 0) return [];
+		return untrack(() => Array.from(all));
+	});
 	let search = $state("");
 	// Match the villager's name, description or anything they love (their own
 	// loves, every item in a group such as Penny's books, and the universal
@@ -72,7 +79,11 @@
 		<a href="https://stardewvalleywiki.com" target="_blank" rel="noreferrer"
 			>Stardew Valley Wiki</a
 		>
-		(CC BY-NC-SA 3.0).
+		(<a
+			href="https://creativecommons.org/licenses/by-nc-sa/3.0/"
+			target="_blank"
+			rel="noreferrer">CC BY-NC-SA 3.0</a
+		>).
 	</small>
 </UiContainer>
 

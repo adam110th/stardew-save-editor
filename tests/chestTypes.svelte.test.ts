@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Item, Save } from "../codegen/save";
 import {
+	ChestProxy,
 	discoverChests,
 	type RawChest,
 	SwappableChests,
@@ -180,13 +181,23 @@ describe("changing a chest's type", () => {
 	});
 
 	it("leaves other containers (fridges, Junimo Chests) without a type to change", () => {
-		const { chest, cleanup } = load(
-			rawChest({
-				name: "Junimo Chest",
-				itemId: 256,
-				specialChestType: "JunimoChest",
-			}),
-		);
+		const junimo = rawChest({
+			name: "Junimo Chest",
+			itemId: 256,
+			specialChestType: "JunimoChest",
+		});
+		// Junimo Chests aren't listed at all (the game shows a shared inventory)
+		expect(() => load(junimo)).toThrow("Expected a chest");
+
+		let chest!: ChestProxy;
+		const cleanup = $effect.root(() => {
+			chest = new ChestProxy(junimo, {
+				id: "junimo",
+				label: "Junimo Chest",
+				kind: "chest",
+				location: "Farm",
+			});
+		});
 		expect(chest.type).toBeUndefined();
 		expect(chest.isMiniShippingBin).toBe(false);
 		cleanup();

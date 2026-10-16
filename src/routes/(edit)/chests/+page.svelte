@@ -363,6 +363,7 @@
 									active={multiSelected
 										? isPicked(chest, index)
 										: chest === selectedChest && index === selectedIndex}
+									{item}
 									data-testid={`chest-${chestIndex}-item-${index}`}
 									onclick={(e) => select(chest, index, e)}
 									ondragover={allowDrop}

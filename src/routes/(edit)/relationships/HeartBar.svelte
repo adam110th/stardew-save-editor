@@ -20,7 +20,10 @@
 	const info = $derived(Villagers.get(name));
 	const loves = $derived(LovedGifts.get(name)?.loves ?? []);
 	const universalLoves = $derived(LovedGifts.get(name)?.universalLoves ?? []);
-	const portrait = $derived(asset(`/assets/portraits/${name}.png`));
+	// The name comes from the save and ends up in a CSS url(), so encode it
+	const portrait = $derived(
+		asset(`/assets/portraits/${encodeURIComponent(name)}.png`),
+	);
 
 	// Portrait sheets are a grid of 64px frames; scale the sheet so one frame fills the box
 	let framesPerRow = $state(2);

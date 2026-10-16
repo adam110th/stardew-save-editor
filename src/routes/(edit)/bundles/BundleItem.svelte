@@ -90,7 +90,10 @@
 	</div>
 
 	{#if checked !== undefined}
-		<UiCheckbox bind:checked />
+		<UiCheckbox
+			bind:checked
+			aria-label={`${item?.name ?? `${quantity.toLocaleString()}g`} donated`}
+		/>
 	{/if}
 </div>
 

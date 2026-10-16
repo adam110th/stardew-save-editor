@@ -111,6 +111,22 @@ export class Inventory
 		}
 	}
 
+	/**
+	 * Swap two backpack slots. Both items stay in the inventory, so unlike two set()
+	 * calls this doesn't dispose either one (which would stop its edits being saved).
+	 */
+	public swap(a: number, b: number) {
+		const raw = this[Raw].items.Item;
+		const first = this.get(a);
+		const second = this.get(b);
+		// @ts-expect-error converting undefined to nil marker
+		raw[a] = second ? second[Raw] : nil;
+		// @ts-expect-error converting undefined to nil marker
+		raw[b] = first ? first[Raw] : nil;
+		super.set(a, second);
+		super.set(b, first);
+	}
+
 	public delete(index: ParentIndex): boolean {
 		const existed = this.has(index);
 		// Preserve reactive anchor by using set(undefined) instead of super.delete

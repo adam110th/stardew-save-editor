@@ -89,6 +89,9 @@ out** (with the reason).
 - **Appearance, Farm (name, profit margin, monsters, mine rewards, date and weather), Community
   Center, Quest Log, Qi's quests, Events, Chests, Crafting and Cooking:** nothing safe and useful
   was missing. Recipe "times crafted" counts were left out as low value.
+- **Chests:** Junimo Chests, and any chest with a global inventory ID, aren't listed (a fix from the
+  [code and security review](code-review.md)). The game shows the team's shared inventory in them and never reads their own
+  item list, so items moved into one were lost.
 - **Farmhands** (reorder only): no fields to add.
 
 ## Not certain

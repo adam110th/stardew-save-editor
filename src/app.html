@@ -3,10 +3,6 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=0.58" />
-		<meta
-			name="google-site-verification"
-			content="0DOEtc-uS6QwL-wBkcKCYNMUwfoLslSEKbVkxbp_ZnE"
-		/>
 		<title>Stardew Valley Save Editor</title>
 		<meta
 			name="description"
@@ -23,6 +19,17 @@
 			content="https://adam110th.github.io/stardew-save-editor/"
 		/>
 		<meta property="og:type" content="website" />
+		<!-- In the shell, not <svelte:head>: with ssr off that only runs after the page's
+		     JavaScript, which link previews and the first favicon request never wait for -->
+		<meta
+			property="og:image"
+			content="https://adam110th.github.io/stardew-save-editor/img/summary.png"
+		/>
+		<link
+			rel="icon"
+			type="image/png"
+			href="%sveltekit.assets%/img/favicon.png"
+		/>
 
 		<meta name="twitter:card" content="summary" />
 

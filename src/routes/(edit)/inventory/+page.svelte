@@ -31,15 +31,13 @@
 
 		const sourceIndex = Number(sourceContainer);
 		const targetIndex = Number(targetContainer);
-		const currentItem = save.player.inventory.get(sourceIndex);
-		const swappingItem = save.player.inventory.get(targetIndex);
 
 		// Not gonna bother checking slot validity here
 		// Armor slots don't support drag and drop currently
 
 		if (targetContainer && sourceContainer) {
-			save.player.inventory.set(sourceIndex, swappingItem);
-			save.player.inventory.set(targetIndex, currentItem);
+			// Swap keeps both items' write-back effects alive
+			save.player.inventory.swap(sourceIndex, targetIndex);
 		}
 
 		selectedIndex = targetIndex;

@@ -31,4 +31,26 @@ describe("Import/Export roundtrip", () => {
 		assertXmlEqual(originalXml, exportedXml);
 		expect(true).toBe(true);
 	});
+
+	it("keeps number-like text as written, such as a farm called 007", async () => {
+		const xml = originalXml
+			.replace("<farmName>Test</farmName>", "<farmName>007</farmName>")
+			.replace(
+				"<favoriteThing>Unit Tests</favoriteThing>",
+				"<favoriteThing>0x1F</favoriteThing>",
+			)
+			.replace("<name>Test</name>", "<name>1e3</name>");
+		let manager!: SaveManager;
+		let promise: Promise<void> = Promise.resolve();
+		const cleanup = $effect.root(() => {
+			manager = new SaveManager();
+			promise = manager.import(new File([xml], "TestSave"));
+		});
+		await promise;
+
+		expect(manager.save?.player.farmName).toBe("007");
+		const exportedXml = await (await manager.export(true)).text();
+		assertXmlEqual(xml, exportedXml);
+		cleanup();
+	});
 });

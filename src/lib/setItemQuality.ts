@@ -1,4 +1,3 @@
-import { calculateEdibility, calculatePrice } from "$lib/ItemQuality";
 import type { ItemProxy } from "$lib/proxies/items";
 
 /** Quality levels the game uses: normal, silver, gold, iridium */
@@ -16,17 +15,11 @@ export const QualityLevels = [
 export const canHaveQuality = (item: ItemProxy | undefined) =>
 	item?.quality !== undefined;
 
-/** Set an item's quality, and recalculate its price & edibility to match */
+/**
+    Set an item's quality. Its saved price and edibility stay as they are: the
+    game stores the base values and applies quality itself when the item is sold
+    or eaten, so scaling them here would apply it twice.
+*/
 export function setItemQuality(item: ItemProxy, quality: number) {
 	item.quality = quality;
-
-	if ("price" in item && item.info?.price !== undefined) {
-		item.price = calculatePrice(item.info.price, quality);
-	}
-
-	if ("edibility" in item && item.info && "edibility" in item.info) {
-		const edibility = item.info.edibility;
-		if (typeof edibility === "number")
-			item.edibility = calculateEdibility(edibility, quality);
-	}
 }

@@ -17,7 +17,7 @@
 
 	let { item = $bindable() }: Props = $props();
 
-	/** Update an item's quality, and recalculate its price & edibility */
+	/** Update an item's quality (the game applies it to price & edibility itself) */
 	const updateQuality = (newQuality: number) =>
 		setItemQuality(item, newQuality);
 </script>
