@@ -11,6 +11,7 @@ import {
 } from "$lib/proxies/bundleSerialization";
 import { Color as ColorProxy } from "$lib/proxies/Color.svelte";
 import { FarmAnimal, FarmAnimalType } from "$lib/proxies/FarmAnimal.svelte";
+import { getStatValue } from "$lib/proxies/Farmer.svelte";
 import { Item as ItemFactory } from "$lib/proxies/Item.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
 import { canHaveQuality } from "$lib/setItemQuality";
@@ -36,6 +37,7 @@ import BuildingSprite from "../src/routes/(edit)/inventory/BuildingSprite.svelte
 import questsPage from "../src/routes/(edit)/quests/+page.svelte";
 import relationshipsPage from "../src/routes/(edit)/relationships/+page.svelte";
 import {
+	BARN_ANIMALS,
 	BARN_ID,
 	barnXml,
 	COOP_ID,
@@ -44,6 +46,7 @@ import {
 	shedXml,
 	withAnimalBuildings,
 } from "./helpers/animalBuildings";
+import { withHouse, withToolAtClint } from "./helpers/upgrades";
 
 interface PageHarness {
 	saveManager: SaveManager;
@@ -328,6 +331,31 @@ describe("Save Manager Integration Tests", () => {
 
 			const rawItem9 = saveManager.save?.player.inventory.get(9)?.[Raw];
 			expect(rawItem9?.name).toBe("Leek");
+		});
+
+		it("edits boots' defense and immunity", async () => {
+			const page = harness.render(editorPage);
+			await fireEvent.click(page.getByTestId("item-9"));
+			await tick();
+			const input = page.getByTestId("item-name") as HTMLInputElement;
+			await fireEvent.input(input, { target: { value: "Sneakers" } });
+			await tick();
+			await fireEvent.click(page.getByText("Sneakers"));
+			await tick();
+
+			const defense = page.getByTestId(
+				"property-defenseBonus",
+			) as HTMLInputElement;
+			const immunity = page.getByTestId(
+				"property-immunityBonus",
+			) as HTMLInputElement;
+			expect(defense.value).toBe("1");
+			expect(immunity.value).toBe("0");
+			await fireEvent.input(defense, { target: { value: "5" } });
+			await fireEvent.input(immunity, { target: { value: "3" } });
+			flushSync();
+			const raw = saveManager.save?.player.inventory.get(9)?.[Raw];
+			expect(raw).toMatchObject({ defenseBonus: 5, immunityBonus: 3 });
 		});
 
 		it("shows the description of the selected item", async () => {
@@ -694,6 +722,175 @@ describe("Save Manager Integration Tests", () => {
 		});
 	});
 
+	describe("Upgrades", () => {
+		it("makes the backpack bigger, and smaller once it's empty", async () => {
+			const page = harness.render(characterPage);
+			const player = () => {
+				if (!saveManager.save) throw new Error("No save");
+				return saveManager.save.player;
+			};
+			const select = page.getByTestId("backpack-size") as HTMLSelectElement;
+			expect(select.value).toBe("12");
+
+			await choose(select, "24");
+			expect(player()[Raw].maxItems).toBe(24);
+			expect(player()[Raw].items.Item).toHaveLength(24);
+
+			// Something in the second row stops it shrinking back
+			player().inventory.set(15, ItemFactory.fromName("Parsnip"));
+			flushSync();
+			const option = (value: string) =>
+				[...select.options].find((o) => o.value === value);
+			expect(option("12")?.disabled).toBe(true);
+			expect(option("36")?.disabled).toBe(false);
+			player().inventory.delete(15);
+			flushSync();
+			expect(option("12")?.disabled).toBe(false);
+		});
+
+		it("starts a house upgrade the game finishes overnight", async () => {
+			const page = harness.render(characterPage);
+			const raw = () => saveManager.save?.player[Raw];
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("0");
+			expect(page.getByTestId("house-upgrade-hint").textContent).toMatch(
+				/Now: Starting house\. Days until Robin adds\s+the kitchen/,
+			);
+
+			expect(page.queryByTestId("house-upgrade-cancel")).toBeNull();
+
+			await fireEvent.input(days, { target: { value: "1" } });
+			expect(raw()?.daysUntilHouseUpgrade).toBe(1);
+			expect(raw()?.houseUpgradeLevel).toBe(0);
+			// Once it's started, the button stops it
+			expect(days.min).toBe("1");
+			await fireEvent.click(page.getByTestId("house-upgrade-cancel"));
+			expect(raw()?.daysUntilHouseUpgrade).toBe(-1);
+			expect(days.value).toBe("0");
+			expect(page.queryByTestId("house-upgrade-cancel")).toBeNull();
+		});
+
+		it("sets the trash can's level", async () => {
+			const page = harness.render(characterPage);
+			await choose(page.getByTestId("trash-can-level"), "2");
+			expect(saveManager.save?.player[Raw].trashCanLevel).toBe(2);
+			// Nothing at Clint's in the test save
+			expect(page.queryByTestId("tool-upgrade-days")).toBeNull();
+		});
+
+		it("edits Mastery XP", async () => {
+			const page = harness.render(characterPage);
+			const input = page.getByTestId("skills-mastery") as HTMLInputElement;
+			await fireEvent.input(input, { target: { value: "30000" } });
+			flushSync();
+			const player = saveManager.save?.player;
+			if (!player) throw new Error("No save");
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(30000);
+			expect(page.getByTestId("mastery-level").textContent).toBe("Level 2/5");
+
+			// Cleared, it waits for a number rather than calling it invalid
+			await fireEvent.input(input, { target: { value: "" } });
+			expect(input.checkValidity()).toBe(true);
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(30000);
+			// Left empty, it goes back to the minimum
+			await fireEvent.blur(input);
+			expect(input.value).toBe("0");
+			expect(input.checkValidity()).toBe(true);
+			expect(getStatValue(player[Raw], "MasteryExp")).toBe(0);
+		});
+
+		it("shows a modded backpack size as text", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace("<maxItems>12</maxItems>", "<maxItems>48</maxItems>"),
+			);
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const size = page.getByTestId("backpack-size");
+			expect(size.tagName).toBe("SPAN");
+			expect(size.textContent).toBe("48 slots");
+		});
+
+		it("cancels a house upgrade Robin has started", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) => withHouse(xml, 1, 2));
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const raw = () => saveManager.save?.player[Raw];
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("2");
+			expect(page.getByTestId("house-upgrade-hint").textContent).toMatch(
+				/Now: Kitchen\. Days until Robin\s+finishes the nursery/,
+			);
+
+			// 0 is below the minimum, so it can't cancel the upgrade by mistake
+			await fireEvent.input(days, { target: { value: "0" } });
+			expect(days.checkValidity()).toBe(false);
+			await fireEvent.blur(days);
+			expect(days.value).toBe("2");
+			expect(raw()?.daysUntilHouseUpgrade).toBe(2);
+
+			await fireEvent.click(page.getByTestId("house-upgrade-cancel"));
+			expect(raw()?.daysUntilHouseUpgrade).toBe(-1);
+			expect(raw()?.houseUpgradeLevel).toBe(1);
+			expect(days.value).toBe("0");
+		});
+
+		it("won't upgrade the house past the cellar", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) => withHouse(xml, 3));
+			saveManager = harness.saveManager;
+			const page = harness.render(characterPage);
+			const days = page.getByTestId("house-upgrade-days") as HTMLInputElement;
+			expect(days.disabled).toBe(true);
+			expect(page.getByTestId("house-upgrade-hint").textContent?.trim()).toBe(
+				"Fully upgraded (Cellar).",
+			);
+		});
+	});
+
+	describe("Upgrades at Clint's", () => {
+		const renderAtClint = async (itemId?: string) => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				withToolAtClint(xml, 2, itemId),
+			);
+			saveManager = harness.saveManager;
+			return harness.render(characterPage);
+		};
+
+		it("finishes the tool Clint is upgrading", async () => {
+			const page = await renderAtClint();
+			expect(page.getByText(/Clint: Copper Pickaxe/)).toBeTruthy();
+			const days = page.getByTestId("tool-upgrade-days") as HTMLInputElement;
+			expect(days.value).toBe("2");
+			await fireEvent.input(days, { target: { value: "0" } });
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(0);
+		});
+
+		it("waits for a number when Clint's days are cleared", async () => {
+			const page = await renderAtClint();
+			const days = page.getByTestId("tool-upgrade-days") as HTMLInputElement;
+			await fireEvent.input(days, { target: { value: "" } });
+			expect(days.checkValidity()).toBe(true);
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(2);
+			// Left empty, it goes back to the minimum: ready now
+			await fireEvent.blur(days);
+			expect(days.value).toBe("0");
+			expect(days.checkValidity()).toBe(true);
+			expect(saveManager.save?.player[Raw].daysLeftForToolUpgrade).toBe(0);
+		});
+
+		it("locks the trash can while Clint has it", async () => {
+			const page = await renderAtClint("CopperTrashCan");
+			const select = page.getByTestId("trash-can-level") as HTMLSelectElement;
+			expect(select.disabled).toBe(true);
+			expect(
+				page.getByText("Clint is upgrading it; collect it from him first."),
+			).toBeTruthy();
+		});
+	});
+
 	describe("Relationships", () => {
 		it("should preserve relationships when opening the page and editing money", async () => {
 			const save = saveManager.save;
@@ -819,6 +1016,25 @@ describe("Save Manager Integration Tests", () => {
 				const rawFriend = friendship[Raw];
 				expect(rawFriend.value.Friendship.Points).toBe(targetHearts * 250);
 			}
+		});
+
+		it("edits the gifts given this week", async () => {
+			const page = harness.render(relationshipsPage);
+			const firstRow = page.getAllByTestId("friendship-row")[0] as HTMLElement;
+			const name = within(firstRow).getByTestId("friendship-name").textContent;
+			const friendship = saveManager.save?.player.friendships.get(name ?? "");
+			if (!friendship) throw new Error(`No friendship with ${name}`);
+
+			const gifts = within(firstRow).getByTestId(
+				"friendship-gifts-week",
+			) as HTMLInputElement;
+			expect(gifts.value).toBe(String(friendship.giftsThisWeek));
+			await fireEvent.input(gifts, { target: { value: "2" } });
+			flushSync();
+			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(2);
+			await fireEvent.input(gifts, { target: { value: "0" } });
+			flushSync();
+			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(0);
 		});
 	});
 
@@ -2262,5 +2478,65 @@ describe("Animal buildings", () => {
 		expect(
 			within(header).getByTestId("building-residents").textContent,
 		).toMatch(/4\/4 animals\s+live here/);
+	});
+
+	/** An animal's card, found by its name */
+	const animalCard = (page: { container: HTMLElement }, name: string) => {
+		const heading = within(page.container).getByRole("heading", {
+			level: 4,
+			name,
+		});
+		return heading.closest(".animal-card") as HTMLElement;
+	};
+
+	it("toggles pregnancy and the Golden Animal Cracker per animal", async () => {
+		const page = harness.render(buildingsPage);
+		const card = (name: string) => animalCard(page, name);
+		const raw = (id: string) =>
+			harness.saveManager.save?.farmAnimals.find(
+				(a) => String(a[Raw].key.long) === id,
+			)?.[Raw].value.FarmAnimal;
+
+		// Only animals that can get pregnant get the toggle
+		const daisy = card("Daisy");
+		expect(
+			within(card("Clucky")).queryByTestId("animal-allow-pregnancy"),
+		).toBeNull();
+		expect(
+			within(card("Clucky")).getByTestId("animal-golden-cracker"),
+		).toBeTruthy();
+
+		const pregnancy = within(daisy).getByTestId(
+			"animal-allow-pregnancy",
+		) as HTMLInputElement;
+		expect(pregnancy.checked).toBe(true);
+		await fireEvent.click(pregnancy);
+		flushSync();
+		expect(raw(BARN_ANIMALS.daisy)?.allowReproduction).toBe(false);
+
+		const cracker = within(daisy).getByTestId(
+			"animal-golden-cracker",
+		) as HTMLInputElement;
+		expect(cracker.checked).toBe(false);
+		await fireEvent.click(cracker);
+		flushSync();
+		expect(raw(BARN_ANIMALS.daisy)?.hasEatenAnimalCracker).toBe(true);
+		expect(raw(BARN_ANIMALS.bessie)?.hasEatenAnimalCracker).toBe(false);
+	});
+
+	it("doesn't offer pigs a Golden Animal Cracker", () => {
+		const barn = building(BARN_ID);
+		const deluxe = barn.tiers.find((t) => t.name === "Deluxe Barn");
+		if (!deluxe) throw new Error("No Deluxe Barn");
+		barn.changeType(deluxe);
+		const player = harness.saveManager.save?.player;
+		if (!player) throw new Error("No player");
+		barn.adoptAnimal("Pig", "Truffles", player);
+		flushSync();
+
+		const page = harness.render(buildingsPage);
+		const truffles = animalCard(page, "Truffles");
+		expect(within(truffles).getByTestId("animal-allow-pregnancy")).toBeTruthy();
+		expect(within(truffles).queryByTestId("animal-golden-cracker")).toBeNull();
 	});
 });

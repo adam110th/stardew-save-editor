@@ -11,11 +11,16 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 - ✅ Character Customization
   - Edit appearance, name, and farm name
-  - Modify skills and money
-  - Change relationships with NPCs, with each villager's description and loved gifts
+  - Modify skills and money, and Mastery XP (it can't go below what claimed masteries cost)
+  - Upgrade the backpack (12, 24 or 36 slots), the trash can, and the house: Robin's countdown is
+    set, so the game does the upgrade overnight and moves the furniture itself (or cancel one she's
+    started)
+  - Finish the tool Clint is upgrading
+  - Change relationships with NPCs, with each villager's description and loved gifts, and reset the
+    gifts given this week
 - ✅ Inventory Management  
   - Add/remove items
-  - Modify existing items
+  - Modify existing items, including boots' defense and immunity
 - ✅ Recipe Management
   - Unlock cooking recipes
   - Unlock crafting recipes
@@ -35,7 +40,8 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - Finished bundles leave their rewards to collect in-game
   - Joja route: buy Community Development projects instead
 - ✅ Buildings
-  - Edit farm animals in barns and coops
+  - Edit farm animals in barns and coops, including whether they can get pregnant and whether they've
+    eaten a Golden Animal Cracker
   - Add animals to barns and coops: only ones that building can house, and only while there's room.
     Villagers get to mention them, as when you buy one from Marnie
   - Upgrade or downgrade barns, coops and sheds (e.g. Coop → Big Coop → Deluxe Coop, Shed → Big Shed),
@@ -57,11 +63,11 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - Automatic save backups
   - Cross-platform support
 
+See [docs/menu-audit.md](docs/menu-audit.md) for what each menu can edit, and what's left out on
+purpose (and why).
+
 ### Planned Features
 
-- 🔄 Fill gaps in existing menus
-  - Audit each menu against the save data for editable fields not yet exposed
-    (e.g. is a tool's weight stored in the save, and can it be edited?)
 - 🔄 Full code and security review of this fork
 
 ## Usage

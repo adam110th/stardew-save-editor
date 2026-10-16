@@ -31,6 +31,9 @@ If you need assets that aren't copied from that command, you can modify it in `c
 `buildingToUpgrade`, `validOccupantTypes`, doors, and the items the game adds or moves inside), taken
 from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
 
+`generated/farmanimals.json` has each animal's house, and whether it can get pregnant
+(`CanGetPregnant`) or eat a Golden Animal Cracker (`CanEatGoldenCrackers`), from `Data/FarmAnimals`.
+
 `generated/quests.json` is `Data/Quests`, parsed by `codegen/quests.ts` the way the game reads it
 (`Quest.getQuestFromId`), so completing a story quest in the editor can start the next one.
 
