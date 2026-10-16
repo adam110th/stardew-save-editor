@@ -42,6 +42,11 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
     with the incubator and the things the game moves inside handled as Robin's upgrade does. A downgrade
     needs the animals to fit, moves those things back, and says if anything couldn't go back
   - See each building's description and build cost (gold and materials)
+- ✅ Quest Log
+  - See each quest in the journal with its description, objective, reward and days left
+  - Mark quests complete as the game does (gold waits in the journal to collect in-game, the next
+    story quest starts, and Help Wanted quests count toward Prize Tickets), or remove them
+  - Change a quest's gold reward, and how many days a Help Wanted quest has left
 - ✅ Save Management
   - Switch between farmhands
   - Automatic save backups
@@ -49,7 +54,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 ### Planned Features
 
-- 🔄 Quest management
 - 🔄 Fill gaps in existing menus
   - Audit each menu against the save data for editable fields not yet exposed
     (e.g. is a tool's weight stored in the save, and can it be edited?)

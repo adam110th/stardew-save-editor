@@ -277,6 +277,14 @@ export class SaveProxy implements DataProxy<SaveFile> {
 		return ids;
 	}
 
+	/** Building types that have ever been built (the team's constructedBuildings) */
+	get constructedBuildings(): string[] {
+		const built = this[Raw].SaveGame.constructedBuildings;
+		return typeof built === "object" && Array.isArray(built.string)
+			? built.string.map(String)
+			: [];
+	}
+
 	/** Remember that a building type has been built (the team's constructedBuildings) */
 	addConstructedBuilding(type: string) {
 		const save = this[Raw].SaveGame;

@@ -31,6 +31,9 @@ If you need assets that aren't copied from that command, you can modify it in `c
 `buildingToUpgrade`, `validOccupantTypes`, doors, and the items the game adds or moves inside), taken
 from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
 
+`generated/quests.json` is `Data/Quests`, parsed by `codegen/quests.ts` the way the game reads it
+(`Quest.getQuestFromId`), so completing a story quest in the editor can start the next one.
+
 The festival dates and weather rules in `src/lib/calendar.ts` aren't generated: they're written from
 `Data/Festivals/FestivalDates`, `Data/PassiveFestivals` and the game's weather code
 (`Game1.getWeatherModificationsForDate`, `LocationWeather`, `Utility.isGreenRainDay`), so check them

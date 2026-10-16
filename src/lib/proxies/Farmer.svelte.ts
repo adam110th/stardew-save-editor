@@ -7,6 +7,7 @@ import type { Gender, Player } from "$types/save";
 import { type DataProxy, Raw } from ".";
 import { Friendships } from "./Friendship.svelte";
 import { BootsProxy, ClothingProxy, HatProxy, RingProxy } from "./items";
+import { QuestLog } from "./Quest.svelte";
 
 const NIL_ATTR = "@_xsi:nil";
 const walletFlagMap: ReadonlyArray<[legacyField: string, flag: MailFlag]> = [
@@ -172,6 +173,8 @@ export class Farmer implements DataProxy<Player> {
 	/** Letters waiting to be read in the in-game mailbox */
 	public mailbox: MailBox;
 	public friendships: Friendships;
+	/** The journal */
+	public questLog: QuestLog;
 
 	// Provide compatibility alias for underlying raw object
 	get raw() {
@@ -322,6 +325,9 @@ export class Farmer implements DataProxy<Player> {
 
 		// Friendships reactive map (lookup by NPC name)
 		this.friendships = new Friendships(this[Raw].friendshipData);
+
+		// Needs the inventory and mail, for completing quests
+		this.questLog = new QuestLog(this);
 
 		// Unique ID snapshot
 		this.uniqueID = this[Raw].UniqueMultiplayerID;

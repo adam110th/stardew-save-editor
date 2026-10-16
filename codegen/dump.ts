@@ -46,6 +46,7 @@ import {
 	type Size,
 } from "./items.js";
 import { createLocalizedTextResolver } from "./localizedText.js";
+import { getQuests } from "./quests.js";
 import {
 	createSpecialOrderResolver,
 	parseRequiredCount,
@@ -431,6 +432,17 @@ const qiQuestsArray = Object.entries(specialOrders)
 		};
 	});
 await writeFile("./generated/qiquests.json", JSON.stringify(qiQuestsArray));
+
+// **Quests**
+
+// Story quests, so completing one in the editor can start the next as the game does
+const questData = JSON.parse(
+	await readFile("./content/Data/Quests.json", "utf-8"),
+) as Record<string, string>;
+await writeFile(
+	"./generated/quests.json",
+	JSON.stringify(getQuests(questData)),
+);
 
 // **Assets**
 
