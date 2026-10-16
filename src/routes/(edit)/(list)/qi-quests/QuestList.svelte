@@ -48,7 +48,9 @@
 			{#if regex.test(quest.name)}
 				{@const active = inProgress.has(quest.questKey)}
 				{@const selected = active || quests.has(quest.questKey)}
-				<label class="entry">
+				<!-- Not a <label>: its first control is the Make Active/Cancel button, so
+				     clicking the text would accept or cancel the quest -->
+				<div class="entry">
 					<div class="key" class:disabled={!selected && atLimit}>
 						<div class="text">
 							<span class="name">
@@ -85,6 +87,7 @@
 						<UiCheckbox
 							class="checkbox"
 							data-testid="qi-quest-{quest.questKey.toLowerCase()}"
+							aria-label={quest.name}
 							checked={selected}
 							disabled={active || (!selected && atLimit)}
 							onchange={() => {
@@ -96,7 +99,7 @@
 							}}
 						/>
 					</div>
-				</label>
+				</div>
 			{/if}
 		{/each}
 	</div>

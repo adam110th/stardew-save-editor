@@ -24,7 +24,8 @@
 
 	let { player }: Props = $props();
 
-	let gender = $derived(player.gender.toLowerCase()) as "male" | "female";
+	// Map to a known value: the raw string comes from the save and ends up in a CSS url()
+	let gender = $derived(player.gender === Gender.Female ? "female" : "male");
 
 	// Spritesheets
 	let baseSheet = $derived(asset(`/img/${gender}_farmer.png`));

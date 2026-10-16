@@ -266,7 +266,11 @@
 			target="_blank"
 			rel="noreferrer">List of Vanilla Event IDs</a
 		>
-		on the Stardew Modding Wiki (CC BY-SA 4.0).
+		on the Stardew Modding Wiki (<a
+			href="https://creativecommons.org/licenses/by-sa/4.0/"
+			target="_blank"
+			rel="noreferrer">CC BY-SA 4.0</a
+		>).
 	</small>
 </UiContainer>
 

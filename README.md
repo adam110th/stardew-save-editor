@@ -103,4 +103,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup and contri
 
 ## Legal
 
-This project uses assets from Stardew Valley under Fair Use. These assets are owned by ConcernedApe and are not covered by this project's license. See [LICENSE.md](./LICENSE.md) for details.
+This project uses assets from Stardew Valley under Fair Use. These assets are owned by ConcernedApe and are not covered by this project's license. Villager descriptions and event names come from the Stardew Valley Wiki (CC BY-NC-SA 3.0) and the Stardew Modding Wiki (CC BY-SA 4.0), and keep those licenses. See [LICENSE.md](./LICENSE.md) for details.

@@ -89,6 +89,53 @@ describe("chest discovery and editing", () => {
 		cleanup();
 	});
 
+	it("leaves out Junimo Chests and other chests with a shared inventory", () => {
+		const placed = chest();
+		const junimo = {
+			...chest("Junimo Chest"),
+			itemId: "256",
+			specialChestType: "JunimoChest",
+			globalInventoryId: { string: { "@_xsi:nil": "true" } },
+		} as unknown as RawChest;
+		const shared = {
+			...chest(),
+			globalInventoryId: { string: "SomeModInventory" },
+		} as RawChest;
+		const ordinary = {
+			...chest(),
+			globalInventoryId: { string: { "@_xsi:nil": "true" } },
+		} as unknown as RawChest;
+		const entry = (x: number, object: RawChest) => ({
+			key: { Vector2: { X: x, Y: 0 } },
+			value: { Object: object },
+		});
+		const save = {
+			locations: {
+				GameLocation: [
+					{
+						name: "Farm",
+						objects: {
+							item: [
+								entry(1, placed),
+								entry(2, junimo),
+								entry(3, shared),
+								entry(4, ordinary),
+							],
+						},
+						buildings: "",
+					},
+				],
+			},
+		} as unknown as Save;
+
+		let discovered = [] as ReturnType<typeof discoverChests>;
+		const cleanup = $effect.root(() => {
+			discovered = discoverChests(save);
+		});
+		expect(discovered.map(({ metadata }) => metadata.x)).toEqual([1, 4]);
+		cleanup();
+	});
+
 	it("adds, edits, and deletes only the chest item list", () => {
 		const raw = chest("Big Chest");
 		const save = {

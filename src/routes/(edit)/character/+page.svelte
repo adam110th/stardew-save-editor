@@ -26,7 +26,8 @@
 	const farm = save?.farm;
 	if (!player || !farm || !save) throw new Error("No player data found");
 
-	const mail = save.player.mailReceived;
+	// Follow the selected farmer: the page stays mounted when the sidebar switches farmer
+	const mail = $derived(save.player.mailReceived);
 
 	const unlocks = [
 		["📙", MailFlag.HasDwarvishTranslationGuide, "Dwarvish Translation Guide"],

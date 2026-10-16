@@ -127,6 +127,19 @@ describe("Community Center bundles", () => {
 		).toContain(`${bundle.requiredItemCount}/${bundle.requiredItemCount}`);
 	});
 
+	it("names each item's checkbox after the item", () => {
+		const bundle = byName("Quality Crops");
+		const { container } = render(BundleCard, { bundle });
+		const boxes = within(container).getAllByRole("checkbox", {
+			name: / donated$/,
+			hidden: true,
+		});
+		expect(boxes).toHaveLength(bundle.requiredItems.length);
+		expect(boxes.map((box) => box.getAttribute("aria-label"))).not.toContain(
+			"undefined donated",
+		);
+	});
+
 	it("only ticks a Joja project once every bundle in its room is done", async () => {
 		const { save, bundles } = loaded();
 		const { container } = render(JojaBundles, { save, bundles });
@@ -143,5 +156,68 @@ describe("Community Center bundles", () => {
 		await fireEvent.click(bus);
 		expect(vault.every((b) => b.completed)).toBe(true);
 		expect(bus.checked).toBe(true);
+	});
+});
+
+describe("Community Center side effects in a co-op save", () => {
+	mockIDB();
+
+	/** The test save plus a farmhand; both are Joja members who bought the bus without ticking bundles */
+	const loadJojaCoop = async () => {
+		const flags = ["JojaMember", "jojaVault", "ccVault"]
+			.map((flag) => `<string>${flag}</string>`)
+			.join("");
+		const xml = (await readFile("tests/TestSave"))
+			.toString("utf-8")
+			.replace("<mailReceived>", `<mailReceived>${flags}`);
+		const start = xml.indexOf("<player>") + "<player>".length;
+		const farmhand = xml
+			.slice(start, xml.indexOf("</player>"))
+			.replace("<name>Test</name>", "<name>Hand</name>")
+			.replace(
+				/<UniqueMultiplayerID>\d+<\/UniqueMultiplayerID>/,
+				"<UniqueMultiplayerID>123456789</UniqueMultiplayerID>",
+			);
+		const coop = xml.replace(
+			"<farmhands />",
+			`<farmhands><Farmer>${farmhand}</Farmer></farmhands>`,
+		);
+
+		let saveManager!: SaveManager;
+		let promise: Promise<void> = Promise.resolve();
+		const cleanup = $effect.root(() => {
+			saveManager = new SaveManager();
+			promise = saveManager.import(new File([coop], "TestSave"));
+		});
+		await promise;
+		flushSync();
+		const save = saveManager.save;
+		if (!save?.communityBundles) throw new Error("Save not loaded");
+		return { save, bundles: save.communityBundles, cleanup };
+	};
+
+	it("keeps bought Joja projects when switching farmer or editing another room", async () => {
+		const { save, bundles, cleanup } = await loadJojaCoop();
+		const bought = () =>
+			save.players.map(
+				(p) =>
+					p.mailReceived.has(MailFlag.jojaVault) &&
+					p.mailReceived.has(MailFlag.ccVault),
+			);
+		expect(bought()).toEqual([true, true]);
+
+		save.nextFarmer();
+		flushSync();
+		await tick();
+		expect(save.player.name).toBe("Hand");
+		expect(bought()).toEqual([true, true]);
+
+		// Finishing one Pantry bundle doesn't finish the room, so the Vault is left alone
+		const spring = [...bundles.values()].find((b) => b.name === "Spring Crops");
+		spring?.complete();
+		flushSync();
+		await tick();
+		expect(bought()).toEqual([true, true]);
+		cleanup();
 	});
 });

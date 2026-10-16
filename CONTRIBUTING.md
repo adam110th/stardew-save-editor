@@ -6,7 +6,7 @@ This project is built in NodeJS, with [Svelte 5](https://svelte.dev/) and [Svelt
 
 ### Quick Start
 
-Make sure to have [NodeJS 20, 22, or later](https://nodejs.org/en/download/) installed.
+Make sure to have [Node.js 20.19+, 22.12+ or 24+](https://nodejs.org/en/download/) installed (`.npmrc` sets `engine-strict`, so older versions fail `npm install`).
 
 ```bash
 # Clone repository
@@ -23,14 +23,15 @@ npm run dev
 
 Follow [these instructions from the SDV Wiki](https://stardewvalleywiki.com/Modding:Editing_XNB_files#Unpack_game_files) to unpack the game files. Put them in a `content` folder at the root of the project (eg. `content/Characters/Abigail.png`).
 
-Then run `npm run dump`.
+Then run `npm run dump`, then `npm run format`.
 
 If you need assets that aren't copied from that command, you can modify it in `codegen/dump.ts`.
 
-The generated data comes from two scripts:
+The generated data comes from three scripts:
 
-- `npm run dump` reads the `content` folder. It copies textures and portraits into `static/assets` and writes everything in `generated/` except `villagers.json`. That includes `gifttastes.json`, each villager's loved gifts, worked out from `content/Data/NPCGiftTastes.json` with the game's own rules (see `codegen/giftTastes.ts`); it prints any loved gift it can't match to an item.
+- `npm run dump` reads the `content` folder. It copies textures and portraits into `static/assets` and writes everything in `generated/` except `villagers.json` and `events.json`. That includes `gifttastes.json`, each villager's loved gifts, worked out from `content/Data/NPCGiftTastes.json` with the game's own rules (see `codegen/giftTastes.ts`); it prints any loved gift it can't match to an item.
 - `npm run dump:villagers` writes `generated/villagers.json`. Villager descriptions aren't in the game files, so it fetches them from the [Stardew Valley Wiki](https://stardewvalleywiki.com) (CC BY-NC-SA 3.0). It needs `curl` and an internet connection, but not the `content` folder.
+- `npm run dump:events` writes `generated/events.json`, fetching event names from the Stardew Modding Wiki (CC BY-SA 4.0). It also needs `curl` and an internet connection.
 
 `generated/buildings.json` includes what the editor needs to upgrade buildings (each building's
 `buildingToUpgrade`, `validOccupantTypes`, doors, and the items the game adds or moves inside), taken
@@ -43,7 +44,7 @@ from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
 (`Quest.getQuestFromId`), so completing a story quest in the editor can start the next one.
 
 Some data isn't in the game's files, so it comes from the wikis instead. `npm run dump:villagers`
-refreshes `generated/villagers.json` (descriptions and loved gifts, from the
+refreshes `generated/villagers.json` (descriptions, from the
 [Stardew Valley Wiki](https://stardewvalleywiki.com)) and `npm run dump:events` refreshes
 `generated/events.json` (event names, from the Stardew Modding Wiki's
 [List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)). They need
@@ -73,7 +74,7 @@ The code is broken up into a few sections.
 - `src/lib`: Contains the core code.
   - `src/lib/proxies`: Contains reactive proxy classes for interacting with save data.
   - `src/lib/ui`: Contains reusable Svelte components used throughout the app.
-  - `src/lib/worker`: Contains web worker scripts for offloading heavy computations.
+  - `src/lib/workers`: Contains web worker scripts for offloading heavy computations.
 - `src/routes`: Contains routes & page components for the SvelteKit app.
 - `codegen`: Contains code/asset generation scripts and utilities.
 - `generated`: Output from code generation scripts.

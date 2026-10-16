@@ -19,18 +19,6 @@
 	});
 </script>
 
-<svelte:head>
-	<meta property="og:image" content={asset("/img/summary.png")} />
-	<link rel="icon" type="image/png" href={asset("/img/favicon.png")} />
-	<link rel="canonical" href={resolve("/backups")} />
-	<link rel="canonical" href={resolve("/inventory")} />
-	<link rel="canonical" href={resolve("/character")} />
-	<link rel="canonical" href={resolve("/appearance")} />
-	<link rel="canonical" href={resolve("/relationships")} />
-	<link rel="canonical" href={resolve("/crafting")} />
-	<link rel="canonical" href={resolve("/cooking")} />
-</svelte:head>
-
 <!-- GITHUB LOGO -->
 <a
 	href="https://github.com/adam110th/stardew-save-editor"

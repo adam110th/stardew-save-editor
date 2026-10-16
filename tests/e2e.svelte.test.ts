@@ -12,6 +12,7 @@ import {
 import { Color as ColorProxy } from "$lib/proxies/Color.svelte";
 import { FarmAnimal, FarmAnimalType } from "$lib/proxies/FarmAnimal.svelte";
 import { getStatValue } from "$lib/proxies/Farmer.svelte";
+import { Friendship } from "$lib/proxies/Friendship.svelte";
 import { Item as ItemFactory } from "$lib/proxies/Item.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
 import { canHaveQuality } from "$lib/setItemQuality";
@@ -131,6 +132,32 @@ const createPageHarness = async (
 	});
 
 	return { saveManager, render: renderWithContext, cleanup };
+};
+
+/** Give the test save a farmhand called Hand, a copy of the host */
+const withFarmhand = (xml: string) => {
+	const start = xml.indexOf("<player>") + "<player>".length;
+	const farmhand = xml
+		.slice(start, xml.indexOf("</player>"))
+		.replace("<name>Test</name>", "<name>Hand</name>")
+		.replace(
+			/<UniqueMultiplayerID>\d+<\/UniqueMultiplayerID>/,
+			"<UniqueMultiplayerID>123456789</UniqueMultiplayerID>",
+		);
+	return xml.replace(
+		"<farmhands />",
+		`<farmhands><Farmer>${farmhand}</Farmer></farmhands>`,
+	);
+};
+
+/** Each slot button is named after its item, so screen readers can tell them apart */
+const expectNamedSlots = (slots: HTMLElement[]) => {
+	expect(slots.length).toBeGreaterThan(0);
+	for (const slot of slots)
+		expect(slot.getAttribute("aria-label")).toBe(
+			slot.getAttribute("data-item-name") ?? "Empty slot",
+		);
+	expect(slots.some((slot) => slot.hasAttribute("data-item-name"))).toBe(true);
 };
 
 // Select a <select> option the way a user would, then notify Svelte's binding
@@ -316,6 +343,11 @@ describe("Save Manager Integration Tests", () => {
 	});
 
 	describe("Inventory Management", () => {
+		it("names each backpack slot after its item", () => {
+			const page = harness.render(editorPage);
+			expectNamedSlots(page.getAllByTestId(/^item-\d+$/));
+		});
+
 		it("should create and edit items", async () => {
 			const page = harness.render(editorPage);
 			const slot = page.getByTestId("item-9");
@@ -433,6 +465,24 @@ describe("Save Manager Integration Tests", () => {
 	});
 
 	describe("Character Customization", () => {
+		it("only uses the known farmer sprite sheets, whatever the save's gender says", async () => {
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace(
+					"<gender>Male</gender>",
+					"<gender>x),url(https://attacker.example/a</gender>",
+				),
+			);
+			saveManager = harness.saveManager;
+			const page = harness.render(appearancePage);
+			const styles = [
+				...page.container.querySelectorAll(".appearance > div"),
+			].map((layer) => layer.getAttribute("style") ?? "");
+			expect(styles.length).toBeGreaterThan(0);
+			expect(styles.join("\n")).not.toContain("attacker.example");
+			expect(styles.join("\n")).toContain("/img/male_farmer.png");
+		});
+
 		it("should modify character appearance", () => {
 			const page = harness.render(appearancePage);
 			const changes = [
@@ -722,6 +772,29 @@ describe("Save Manager Integration Tests", () => {
 		});
 	});
 
+	describe("Wallet", () => {
+		it("edits the selected farmer's wallet after switching farmer", async () => {
+			harness.cleanup();
+			harness = await createPageHarness(withFarmhand);
+			saveManager = harness.saveManager;
+			const save = saveManager.save;
+			if (!save) throw new Error("No save loaded");
+			const [host, hand] = save.players;
+			if (!host || !hand) throw new Error("Expected a farmhand");
+			const hostHad = host.mailReceived.has(MailFlag.HasSkullKey);
+			const handHad = hand.mailReceived.has(MailFlag.HasSkullKey);
+
+			const page = harness.render(characterPage);
+			save.nextFarmer();
+			flushSync();
+			expect(save.player.name).toBe("Hand");
+
+			await fireEvent.click(page.getByText("💀"));
+			expect(hand.mailReceived.has(MailFlag.HasSkullKey)).toBe(!handHad);
+			expect(host.mailReceived.has(MailFlag.HasSkullKey)).toBe(hostHad);
+		});
+	});
+
 	describe("Upgrades", () => {
 		it("makes the backpack bigger, and smaller once it's empty", async () => {
 			const page = harness.render(characterPage);
@@ -966,6 +1039,67 @@ describe("Save Manager Integration Tests", () => {
 			expect(save.player[Raw].friendshipData.item).toHaveLength(
 				characters.length,
 			);
+		});
+
+		it("keeps a row in place, and focused, while its points are typed", async () => {
+			const save = saveManager.save;
+			if (!save) throw new Error("No save loaded");
+			const page = harness.render(relationshipsPage);
+			const nameAt = (index: number) => {
+				const row = page.getAllByTestId("friendship-row")[index];
+				if (!row) throw new Error(`No row ${index}`);
+				return within(row).getByTestId("friendship-name").textContent ?? "";
+			};
+			const top = nameAt(0);
+			const first = page.getAllByTestId("friendship-row")[0] as HTMLElement;
+			const input = within(first).getByTestId(
+				"friendship-points",
+			) as HTMLInputElement;
+			input.focus();
+
+			// The first digit of "2000" leaves the top villager with the fewest points
+			await fireEvent.input(input, { target: { value: "2" } });
+			flushSync();
+			expect(save.player.friendships.get(top)?.points).toBe(2);
+			expect(nameAt(0)).toBe(top);
+			expect(document.activeElement).toBe(input);
+		});
+
+		it("keeps a villager's name from the save inside its portrait's url()", async () => {
+			const save = saveManager.save;
+			if (!save) throw new Error("No save loaded");
+			const name = 'Lewis.png#"),url("https://attacker.example/b';
+			save.player.friendships.set(name, Friendship.fromName(name));
+			// happy-dom doesn't load images: report every portrait as loaded
+			const requested: string[] = [];
+			vi.stubGlobal(
+				"Image",
+				class {
+					naturalWidth = 128;
+					onload?: () => void;
+					set src(value: string) {
+						requested.push(value);
+						queueMicrotask(() => this.onload?.());
+					}
+				},
+			);
+			try {
+				const page = harness.render(relationshipsPage);
+				const portrait = page.getByRole("img", { name: `${name} portrait` });
+				await vi.waitFor(() =>
+					expect(requested.some((src) => src.includes("attacker"))).toBe(true),
+				);
+				await tick();
+				// Encoded, so a quote in the name can't end the url("...") string early
+				expect(portrait.getAttribute("style")).not.toContain(
+					'url("https://attacker.example',
+				);
+				expect(requested.filter((src) => src.includes("attacker"))).toEqual([
+					`/assets/portraits/${encodeURIComponent(name)}.png`,
+				]);
+			} finally {
+				vi.unstubAllGlobals();
+			}
 		});
 
 		it("shows each villager's description", () => {
@@ -1376,6 +1510,11 @@ describe("Save Manager Integration Tests", () => {
 			return harness.render(chestsPage, { context });
 		};
 
+		it("names each chest slot after its item", () => {
+			const page = renderChests();
+			expectNamedSlots(page.getAllByTestId(/^chest-0-item-\d+$/));
+		});
+
 		it("sets every quality item in the chest to the clicked star", async () => {
 			const page = renderChests();
 			const items = eligible(0);
@@ -1384,16 +1523,20 @@ describe("Save Manager Integration Tests", () => {
 				...(saveManager.save?.chests[0]?.inventory.values() ?? []),
 			].filter((item) => item && !canHaveQuality(item));
 			const otherQualities = others.map((item) => item?.[Raw].quality);
+			const stats = (item: (typeof items)[number]) => {
+				const raw = item[Raw] as { price?: number; edibility?: number };
+				return [raw.price, raw.edibility];
+			};
+			const statsBefore = items.map(stats);
 
 			await fireEvent.click(page.getByTestId("chest-quality-2"));
 
 			for (const item of items) {
 				expect(item.quality).toBe(2);
 				expect(item[Raw].quality).toBe(2);
-				// Price follows the quality, as when editing one item
-				if ("price" in item && item.info?.price)
-					expect(item.price).toBe(Math.floor(item.info.price * 1.5));
 			}
+			// The game applies quality to the saved base price and edibility itself
+			expect(items.map(stats)).toEqual(statsBefore);
 			// Items without a quality (tools, clay...) are left alone
 			expect(others.map((item) => item?.[Raw].quality)).toEqual(otherQualities);
 		});

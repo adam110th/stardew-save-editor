@@ -6,7 +6,12 @@ export interface VillagerInfo {
 
 /** Strip wiki markup from a line of article text */
 export function wikiToText(text: string) {
-	let out = text;
+	// Keep the text of templates that carry some: {{Price|40000}} reads "40,000g"
+	let out = text.replace(
+		/\{\{[Pp]rice\|([\d,]+)\}\}/g,
+		(_, price: string) =>
+			`${Number(price.replaceAll(",", "")).toLocaleString("en-US")}g`,
+	);
 	// Drop templates, innermost first so nested ones collapse
 	for (let prev = ""; prev !== out; ) {
 		prev = out;
