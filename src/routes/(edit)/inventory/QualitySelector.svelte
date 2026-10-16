@@ -8,8 +8,8 @@
 </script>
 
 <script lang="ts">
-	import { calculatePrice, calculateEdibility } from "$lib/ItemQuality";
 	import type { ObjectProxy } from "$lib/proxies/items";
+	import { setItemQuality } from "$lib/setItemQuality";
 
 	interface Props {
 		item: ObjectProxy;
@@ -18,17 +18,8 @@
 	let { item = $bindable() }: Props = $props();
 
 	/** Update an item's quality, and recalculate its price & edibility */
-	const updateQuality = (newQuality: number) => {
-		item.quality = newQuality;
-
-		if (item.info?.price !== undefined) {
-			item.price = calculatePrice(item.info.price, newQuality);
-		}
-
-		if (item.info?.edibility !== undefined) {
-			item.edibility = calculateEdibility(item.info.edibility, newQuality);
-		}
-	};
+	const updateQuality = (newQuality: number) =>
+		setItemQuality(item, newQuality);
 </script>
 
 <div class="container">
