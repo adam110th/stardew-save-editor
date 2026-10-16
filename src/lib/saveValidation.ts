@@ -13,9 +13,11 @@ export interface SaveValidation {
 
 const SUPPORTED_VERSIONS = ["1.6"];
 const INT32_MAX = 2_147_483_647;
+const UINT32_MAX = 4_294_967_295;
 const VALID_QUALITIES = new Set([0, 1, 2, 4]);
 /** The Missing Bundle; a true reward entry for it crashes the game */
 const MISSING_BUNDLE = 36;
+const SEASONS = new Set(["spring", "summer", "fall", "winter"]);
 
 type Json = Record<string, unknown>;
 
@@ -66,6 +68,22 @@ export function validateSave(parsed: unknown): SaveValidation {
 	if (!Number.isFinite(Number(game.uniqueIDForThisGame)))
 		errors.push("Missing the save's unique ID (uniqueIDForThisGame)");
 
+	// Date: the game won't load a season it can't parse (Game1.currentSeason).
+	// Days outside 1-28 and year 0 load, but are dates the game never makes.
+	const season = String(game.currentSeason ?? "").toLowerCase();
+	if (!SEASONS.has(season))
+		errors.push(
+			`"${game.currentSeason ?? "missing"}" isn't a season (spring, summer, fall or winter)`,
+		);
+	const day = Number(game.dayOfMonth);
+	if (!Number.isInteger(day) || day < 1 || day > 28)
+		warnings.push(`The day of the month (${game.dayOfMonth}) isn't 1 to 28`);
+	const year = Number(game.year);
+	if (!Number.isInteger(year) || year < 1)
+		warnings.push(`The year (${game.year}) is less than 1`);
+	if (game.isSnowing === true && SEASONS.has(season) && season !== "winter")
+		warnings.push(`It's snowing in ${season}, and only snows in winter`);
+
 	// Players
 	const player = game.player;
 	if (!isObject(player)) {
@@ -83,6 +101,22 @@ export function validateSave(parsed: unknown): SaveValidation {
 			const money = Number(farmer.money);
 			if (!Number.isInteger(money) || money < 0 || money > INT32_MAX)
 				errors.push(`${label}'s money (${farmer.money}) is out of range`);
+			// Stats are unsigned ints (Stats.Values), which can't be read back otherwise
+			const stats =
+				isObject(farmer.stats) && isObject(farmer.stats.Values)
+					? asArray(farmer.stats.Values.item).filter(isObject)
+					: [];
+			for (const stat of stats) {
+				const value = isObject(stat.value) ? stat.value.unsignedInt : undefined;
+				if (value === undefined) continue;
+				const key = isObject(stat.key) ? String(stat.key.string) : "?";
+				if (
+					!isWholeNumber(value) ||
+					Number(value) < 0 ||
+					Number(value) > UINT32_MAX
+				)
+					errors.push(`${label}'s ${key} stat (${value}) is out of range`);
+			}
 		}
 		if (!String(player.farmName ?? "").trim())
 			warnings.push("The farm has no name");

@@ -100,6 +100,23 @@ describe("validateSave", () => {
 			},
 			"1 item has an invalid quality",
 		],
+		[
+			"a season the game can't read",
+			(p: Parsed) => {
+				p.SaveGame.currentSeason = "autumn";
+			},
+			'"autumn" isn\'t a season',
+		],
+		[
+			"a stat that isn't an unsigned int",
+			(p: Parsed) => {
+				const stat = p.SaveGame.player.stats.Values.item.find(
+					(s: Parsed) => s.key.string === "daysPlayed",
+				);
+				stat.value.unsignedInt = -102;
+			},
+			"Test's daysPlayed stat (-102) is out of range",
+		],
 	])("rejects %s", async (_, breakIt, message) => {
 		const parsed = await loadParsed();
 		breakIt(parsed);
@@ -157,9 +174,31 @@ describe("validateSave", () => {
 	it("only warns about things the game can load", async () => {
 		const parsed = await loadParsed();
 		parsed.SaveGame.player.farmName = "";
+		parsed.SaveGame.isSnowing = true;
 		const result = validateSave(parsed);
 		expect(result.valid).toBe(true);
-		expect(result.warnings).toContain("The farm has no name");
+		expect(result.warnings).toEqual([
+			"It's snowing in spring, and only snows in winter",
+			"The farm has no name",
+		]);
+	});
+
+	it.each([
+		["day 29", { dayOfMonth: 29 }, "The day of the month (29) isn't 1 to 28"],
+		["day 0", { dayOfMonth: 0 }, "The day of the month (0) isn't 1 to 28"],
+		["year 0", { year: 0 }, "The year (0) is less than 1"],
+	])("warns about %s, a date the game never makes", async (_, date, message) => {
+		const parsed = await loadParsed();
+		Object.assign(parsed.SaveGame, date);
+		const result = validateSave(parsed);
+		expect(result.valid).toBe(true);
+		expect(result.warnings).toEqual([message]);
+	});
+
+	it("reads the season as the game does, ignoring case", async () => {
+		const parsed = await loadParsed();
+		parsed.SaveGame.currentSeason = "Summer";
+		expect(validateSave(parsed).valid).toBe(true);
 	});
 
 	it("summarises the first problems", () => {

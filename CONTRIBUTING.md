@@ -31,6 +31,11 @@ If you need assets that aren't copied from that command, you can modify it in `c
 `buildingToUpgrade`, `validOccupantTypes`, doors, and the items the game adds or moves inside), taken
 from `Data/Buildings` by `codegen/buildingUpgrade.ts`.
 
+The festival dates and weather rules in `src/lib/calendar.ts` aren't generated: they're written from
+`Data/Festivals/FestivalDates`, `Data/PassiveFestivals` and the game's weather code
+(`Game1.getWeatherModificationsForDate`, `LocationWeather`, `Utility.isGreenRainDay`), so check them
+when a game update changes festivals or weather.
+
 ### Reading the Save File
 
 The save format is somewhat inconsistent (in structure and consistency). My recommendation is to use a website/tool to format the save file into something more readable, then use a text editor to search for the data you need. [Here is a tool for that](https://jsonformatter.org/xml-parser).

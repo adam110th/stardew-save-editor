@@ -22,6 +22,13 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - See each recipe's item description
 - ✅ Farm Settings
   - Edit farm name, profit margin (any percentage), monster spawning and mine rewards
+  - Change the date (year, season and day, on a calendar showing each day's weekday and festivals);
+    every farmer's copy of the date and the host's days played change with it
+  - Set today's weather and tomorrow's forecast, within the game's rules: only the weather each
+    season can have (no snow outside winter, no wind in summer), and the days the game always gives
+    the same weather (festivals, the 1st of each season, summer storms, the year's green rain day).
+    Moving the date off one of those days brings back the weather you picked. Rain waters the farm,
+    as a rainy morning does, and taking it away dries only what that watered
   - View settings fixed at farm creation (farm type, random seed, and more)
 - ✅ Community Center
   - Tick donated items, or complete a whole bundle or room at once
@@ -42,7 +49,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 ### Planned Features
 
-- 🔄 Weather/calendar controls
 - 🔄 Quest management
 - 🔄 Fill gaps in existing menus
   - Audit each menu against the save data for editable fields not yet exposed
