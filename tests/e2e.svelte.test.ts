@@ -11,7 +11,9 @@ import {
 } from "$lib/proxies/bundleSerialization";
 import { Color as ColorProxy } from "$lib/proxies/Color.svelte";
 import { FarmAnimal, FarmAnimalType } from "$lib/proxies/FarmAnimal.svelte";
+import { Item as ItemFactory } from "$lib/proxies/Item.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
+import { canHaveQuality } from "$lib/setItemQuality";
 import { Gender, type Player, type Color as RawColor } from "../codegen/save";
 import {
 	SaveManager,
@@ -26,6 +28,7 @@ import craftingPage from "../src/routes/(edit)/(list)/crafting/+page.svelte";
 import appearancePage from "../src/routes/(edit)/appearance/+page.svelte";
 import bundlesPage from "../src/routes/(edit)/bundles/+page.svelte";
 import characterPage from "../src/routes/(edit)/character/+page.svelte";
+import chestsPage from "../src/routes/(edit)/chests/+page.svelte";
 import farmPage from "../src/routes/(edit)/farm/+page.svelte";
 import editorPage from "../src/routes/(edit)/inventory/+page.svelte";
 import BuildingSprite from "../src/routes/(edit)/inventory/BuildingSprite.svelte";
@@ -849,6 +852,61 @@ describe("Save Manager Integration Tests", () => {
 			// TestSave is a Hill-top farm (whichFarm 3)
 			expect(values).toContain("Hill-top");
 			expect(values).toContain("390176213");
+		});
+	});
+
+	describe("Chests", () => {
+		const eligible = (chestIndex: number) =>
+			[...(saveManager.save?.chests[chestIndex]?.inventory.values() ?? [])]
+				.filter((item) => item !== undefined)
+				.filter(canHaveQuality);
+
+		const renderChests = () => {
+			const toastManager = new ToastManager();
+			const context = setToastManagerContext(toastManager);
+			return harness.render(chestsPage, { context });
+		};
+
+		it("sets every quality item in the chest to the clicked star", async () => {
+			const page = renderChests();
+			const items = eligible(0);
+			expect(items.length).toBeGreaterThan(0);
+			const others = [
+				...(saveManager.save?.chests[0]?.inventory.values() ?? []),
+			].filter((item) => item && !canHaveQuality(item));
+			const otherQualities = others.map((item) => item?.[Raw].quality);
+
+			await fireEvent.click(page.getByTestId("chest-quality-2"));
+
+			for (const item of items) {
+				expect(item.quality).toBe(2);
+				expect(item[Raw].quality).toBe(2);
+				// Price follows the quality, as when editing one item
+				if ("price" in item && item.info?.price)
+					expect(item.price).toBe(Math.floor(item.info.price * 1.5));
+			}
+			// Items without a quality (tools, clay...) are left alone
+			expect(others.map((item) => item?.[Raw].quality)).toEqual(otherQualities);
+		});
+
+		it("only changes other chests when 'apply to all chests' is ticked", async () => {
+			const chests = saveManager.save?.chests ?? [];
+			expect(chests.length).toBeGreaterThan(1);
+			// Give a second chest something with a quality
+			const other = 1;
+			chests[other]?.inventory.set(0, ItemFactory.fromName("Parsnip"));
+			flushSync();
+			const before = eligible(other).map((item) => item.quality);
+			expect(before).toEqual([0]);
+
+			const page = renderChests();
+			await fireEvent.click(page.getByTestId("chest-quality-4"));
+			expect(eligible(other).map((item) => item.quality)).toEqual(before);
+
+			await fireEvent.click(page.getByTestId("chest-quality-all"));
+			await fireEvent.click(page.getByTestId("chest-quality-1"));
+			for (const item of eligible(other)) expect(item.quality).toBe(1);
+			for (const item of eligible(0)) expect(item.quality).toBe(1);
 		});
 	});
 
