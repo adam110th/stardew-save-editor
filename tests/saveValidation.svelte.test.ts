@@ -8,6 +8,7 @@ import { MailFlag } from "$lib/proxies/Mail.svelte";
 import { describeProblems, validateSave } from "$lib/saveValidation";
 import { XMLManager } from "$lib/workers/xml";
 import { SaveManager } from "../src/lib/SaveManager.svelte";
+import { withAnimalBuildings } from "./helpers/animalBuildings";
 
 // biome-ignore lint/suspicious/noExplicitAny: poking at raw parsed save data
 type Parsed = any;
@@ -105,6 +106,52 @@ describe("validateSave", () => {
 		const result = validateSave(parsed);
 		expect(result.valid).toBe(false);
 		expect(result.errors.join("\n")).toContain(message);
+	});
+
+	describe("farm animals", () => {
+		// Parsed once; parsing the whole save for each test is slow
+		let parsedWithAnimals: Promise<Parsed> | undefined;
+		const loadWithAnimals = async (): Promise<Parsed> => {
+			parsedWithAnimals ??= readFile("tests/TestSave", "utf-8").then((xml) =>
+				new XMLManager().parse(withAnimalBuildings(xml)),
+			);
+			return structuredClone(await parsedWithAnimals);
+		};
+		const coop = (p: Parsed) =>
+			locationNamed(p, "Farm").buildings.Building.find(
+				(b: { buildingType: string }) => b.buildingType === "Coop",
+			).indoors;
+
+		it("passes animals in buildings and outside", async () => {
+			expect(validateSave(await loadWithAnimals()).valid).toBe(true);
+		});
+
+		it("rejects an animal ID the game can't read", async () => {
+			const parsed = await loadWithAnimals();
+			// What older versions of the editor made
+			const animal = coop(parsed).animals.item[0];
+			animal.key.long = "1700000000000-abc123def";
+			animal.value.FarmAnimal.myID = "1700000000000-abc123def";
+			const result = validateSave(parsed);
+			expect(result.valid).toBe(false);
+			expect(result.errors).toContain("1 farm animal has an invalid ID");
+
+			locationNamed(parsed, "Farm").animals.item[0].value.FarmAnimal.myID =
+				"1.5";
+			expect(validateSave(parsed).errors).toContain(
+				"2 farm animals have an invalid ID",
+			);
+		});
+
+		it("warns about more animals than a building has room for", async () => {
+			const parsed = await loadWithAnimals();
+			coop(parsed).animalLimit = 3;
+			const result = validateSave(parsed);
+			expect(result.valid).toBe(true);
+			expect(result.warnings).toContain(
+				"4 animals live in a Coop with room for 3",
+			);
+		});
 	});
 
 	it("only warns about things the game can load", async () => {

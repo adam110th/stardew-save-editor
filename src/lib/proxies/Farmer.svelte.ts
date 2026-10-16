@@ -299,6 +299,33 @@ export class Farmer implements DataProxy<Player> {
 		this.cookingRecipes = new Recipes(player.cookingRecipes, "cookingRecipes");
 	}
 
+	/**
+	    Start a conversation topic, so villagers can comment on it, unless the
+	    player has already had it (Farmer.autoGenerateActiveDialogueEvent).
+
+	    @param duration How many days it lasts
+	    @returns Whether it was started
+	*/
+	autoGenerateActiveDialogueEvent(id: string, duration = 4) {
+		const raw = this[Raw];
+		// Farmer.hasSeenActiveDialogueEvent
+		const seen = [raw.activeDialogueEvents, raw.previousActiveDialogueEvents]
+			.flatMap((events) => (events ? (events.item ?? []) : []))
+			.some((event) => String(event.key.string) === id);
+		if (seen) return false;
+		if (
+			typeof raw.activeDialogueEvents !== "object" ||
+			!raw.activeDialogueEvents
+		)
+			raw.activeDialogueEvents = { item: [] };
+		raw.activeDialogueEvents.item ??= [];
+		raw.activeDialogueEvents.item.push({
+			key: { string: id },
+			value: { int: duration },
+		});
+		return true;
+	}
+
 	toJSON() {
 		// Undo type safety enhancements
 		// 1. Inventory, switch undefined into <string xsi:nil="true" /> (for farmhands, too) (flags too)

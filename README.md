@@ -29,6 +29,11 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - Joja route: buy Community Development projects instead
 - ✅ Buildings
   - Edit farm animals in barns and coops
+  - Add animals to barns and coops: only ones that building can house, and only while there's room.
+    Villagers get to mention them, as when you buy one from Marnie
+  - Upgrade or downgrade barns, coops and sheds (e.g. Coop → Big Coop → Deluxe Coop, Shed → Big Shed),
+    with the incubator and the things the game moves inside handled as Robin's upgrade does. A downgrade
+    needs the animals to fit, moves those things back, and says if anything couldn't go back
   - See each building's description and build cost (gold and materials)
 - ✅ Save Management
   - Switch between farmhands
@@ -37,8 +42,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 ### Planned Features
 
-- 🔄 Animal editing
-  - Add new animals to existing barns and coops
 - 🔄 Weather/calendar controls
 - 🔄 Quest management
 - 🔄 Fill gaps in existing menus

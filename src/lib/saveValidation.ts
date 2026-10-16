@@ -29,6 +29,10 @@ const asArray = (value: unknown): unknown[] =>
 			? []
 			: [value];
 
+const isWholeNumber = (value: unknown) =>
+	(typeof value === "number" && Number.isInteger(value)) ||
+	(typeof value === "string" && /^-?\d+$/.test(value));
+
 /** Walk every object in the save, calling `visit` on each one that looks like an item */
 function forEachItem(node: unknown, visit: (item: Json) => void) {
 	const stack: unknown[] = [node];
@@ -117,6 +121,46 @@ export function validateSave(parsed: unknown): SaveValidation {
 					"The Missing Bundle has a reward waiting, which crashes the game",
 				);
 		}
+	}
+
+	// Farm animals, outside and in buildings
+	const interiors = locations.flatMap((l) =>
+		isObject(l.buildings)
+			? asArray(l.buildings.Building)
+					.filter(isObject)
+					.map((b) => b.indoors)
+					.filter(isObject)
+			: [],
+	);
+	let badAnimalIds = 0;
+	for (const location of [...locations, ...interiors]) {
+		const animals = isObject(location.animals)
+			? asArray(location.animals.item).filter(isObject)
+			: [];
+		for (const entry of animals) {
+			const key = isObject(entry.key) ? entry.key.long : undefined;
+			const animal =
+				isObject(entry.value) && isObject(entry.value.FarmAnimal)
+					? entry.value.FarmAnimal
+					: {};
+			// Animal IDs are longs; anything else stops the save loading
+			if (!isWholeNumber(key) || !isWholeNumber(animal.myID)) badAnimalIds++;
+		}
+	}
+	if (badAnimalIds)
+		errors.push(
+			`${badAnimalIds} farm animal${badAnimalIds === 1 ? " has" : "s have"} an invalid ID`,
+		);
+	for (const interior of interiors) {
+		if (interior["@_xsi:type"] !== "AnimalHouse") continue;
+		const residents = isObject(interior.animalsThatLiveHere)
+			? asArray(interior.animalsThatLiveHere.long).length
+			: 0;
+		const limit = Number(interior.animalLimit);
+		if (Number.isFinite(limit) && residents > limit)
+			warnings.push(
+				`${residents} animals live in a ${interior.name ?? "building"} with room for ${limit}`,
+			);
 	}
 
 	// Items, wherever they are (inventories, chests, machines...)

@@ -26,6 +26,10 @@ import weapons from "../content/Data/Weapons.json" with { type: "json" };
 import { characters } from "../src/lib/NPCs.js";
 import { getBuildMaterials } from "./buildingCost.js";
 import {
+	type BuildingUpgradeSource,
+	getBuildingUpgradeData,
+} from "./buildingUpgrade.js";
+import {
 	createArtisanGoods,
 	fixTexture,
 	thrw,
@@ -571,6 +575,7 @@ const buildingsArray = await Promise.all(
 			description: resolveDescription(cost.Description) || undefined,
 			buildCost: cost.BuildCost || undefined,
 			buildMaterials: getBuildMaterials(cost.BuildMaterials, objectNames),
+			...getBuildingUpgradeData(obj as BuildingUpgradeSource),
 		};
 	}),
 );
