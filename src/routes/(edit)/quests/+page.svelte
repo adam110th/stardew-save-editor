@@ -79,8 +79,8 @@
 	.wrapper {
 		display: flex;
 		flex-direction: column;
-		/* Fill a 1920x1080 screen (and grow on taller ones), never below 20rem */
-		max-height: max(20rem, calc(100dvh - 330px));
+		/* Fill the window below the page header, never below 20rem */
+		max-height: max(20rem, calc(100dvh - 373px));
 		overflow-y: auto;
 	}
 
