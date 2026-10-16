@@ -127,7 +127,8 @@
 	.wrapper {
 		display: flex;
 		flex-direction: column;
-		height: 20rem;
+		/* Fill a 1920x1080 screen (and grow on taller ones), never below 20rem */
+		height: max(20rem, calc(100dvh - 305px));
 		overflow-y: scroll;
 	}
 

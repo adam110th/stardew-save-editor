@@ -901,24 +901,71 @@ describe("Save Manager Integration Tests", () => {
 			expect(others.map((item) => item?.[Raw].quality)).toEqual(otherQualities);
 		});
 
-		it("only changes other chests when 'apply to all chests' is ticked", async () => {
+		it("only changes the chests in the group being shown", async () => {
 			const chests = saveManager.save?.chests ?? [];
-			expect(chests.length).toBeGreaterThan(1);
-			// Give a second chest something with a quality
-			const other = 1;
-			chests[other]?.inventory.set(0, ItemFactory.fromName("Parsnip"));
+			// chests[1] is the farmhouse kitchen fridge; give it something with a quality
+			const fridge = 1;
+			expect(chests[fridge]?.metadata.location).toBe("FarmHouse");
+			chests[fridge]?.inventory.set(0, ItemFactory.fromName("Parsnip"));
 			flushSync();
-			const before = eligible(other).map((item) => item.quality);
+			const before = eligible(fridge).map((item) => item.quality);
 			expect(before).toEqual([0]);
 
 			const page = renderChests();
 			await fireEvent.click(page.getByTestId("chest-quality-4"));
-			expect(eligible(other).map((item) => item.quality)).toEqual(before);
+			expect(eligible(fridge).map((item) => item.quality)).toEqual(before);
 
-			await fireEvent.click(page.getByTestId("chest-quality-all"));
+			await fireEvent.change(page.getByTestId("chest-group"), {
+				target: { value: "farmhouse-fridges" },
+			});
 			await fireEvent.click(page.getByTestId("chest-quality-1"));
-			for (const item of eligible(other)) expect(item.quality).toBe(1);
-			for (const item of eligible(0)) expect(item.quality).toBe(1);
+			for (const item of eligible(fridge)) expect(item.quality).toBe(1);
+			// The Chests group keeps the iridium it was given
+			for (const item of eligible(0)) expect(item.quality).toBe(4);
+		});
+
+		it("lists every chest in a group at once, each in its own section", async () => {
+			const page = renderChests();
+			const options = [
+				...(page.getByTestId("chest-group") as HTMLSelectElement).options,
+			].map((o) => o.textContent?.trim());
+			expect(options).toEqual([
+				"Chests (1)",
+				"Farm / Cabin Fridges (0)",
+				"Farm House Fridges (1)",
+				"Island Chests (0)",
+				"Island Fridges (1)",
+			]);
+			expect(page.getAllByTestId("chest-section")).toHaveLength(1);
+			expect(page.getByText("Farm - Chest (60, 15)")).toBeTruthy();
+
+			await fireEvent.change(page.getByTestId("chest-group"), {
+				target: { value: "island-fridges" },
+			});
+			const sections = page.getAllByTestId("chest-section");
+			expect(sections).toHaveLength(1);
+			expect(sections[0]?.textContent).toContain("IslandFarmHouse - Fridge");
+		});
+	});
+
+	describe("Relationships search", () => {
+		it("filters villagers by name or loved gift", async () => {
+			const page = harness.render(relationshipsPage);
+			const names = () =>
+				page.queryAllByTestId("friendship-name").map((n) => n.textContent);
+			const all = names().length;
+			expect(all).toBeGreaterThan(2);
+
+			const search = page.getByTestId("relationships-search");
+			await fireEvent.input(search, { target: { value: "lew" } });
+			expect(names()).toEqual(["Lewis"]);
+
+			await fireEvent.input(search, { target: { value: "zzzz" } });
+			expect(names()).toEqual([]);
+			expect(page.getByText('No villagers match "zzzz".')).toBeTruthy();
+
+			await fireEvent.input(search, { target: { value: "" } });
+			expect(names()).toHaveLength(all);
 		});
 	});
 
