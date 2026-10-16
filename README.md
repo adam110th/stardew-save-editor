@@ -39,8 +39,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 - 🔄 Animal editing
   - Add new animals to existing barns and coops
-- 🔄 Building management
-  - Add new buildings to the farm
 - 🔄 Weather/calendar controls
 - 🔄 Quest management
 - 🔄 Fill gaps in existing menus
