@@ -5,7 +5,7 @@
 		chestColor,
 		chestGroup,
 	} from "$lib/chestGroups";
-	import type { ChestProxy } from "$lib/proxies/Chest.svelte";
+	import { type ChestProxy, SwappableChests } from "$lib/proxies/Chest.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
 	import {
@@ -69,12 +69,9 @@
 		const seen = new Map<string, number>();
 		const counts = new Map<string, number>();
 		for (const chest of selectedGroup?.chests ?? [])
-			counts.set(
-				chest.metadata.label,
-				(counts.get(chest.metadata.label) ?? 0) + 1,
-			);
+			counts.set(chest.label, (counts.get(chest.label) ?? 0) + 1);
 		for (const chest of selectedGroup?.chests ?? []) {
-			const label = chest.metadata.label;
+			const label = chest.label;
 			const n = (seen.get(label) ?? 0) + 1;
 			seen.set(label, n);
 			result.set(
@@ -102,6 +99,27 @@
 	};
 
 	const deleteItem = () => selectedChest?.inventory.delete(selectedIndex);
+
+	/** Swap a chest for another kind (e.g. Stone Chest, or a 70-slot Big Chest) */
+	const changeType = (chest: ChestProxy, itemId: string) => {
+		const type = SwappableChests.find((t) => t.itemId === itemId);
+		if (!type || type === chest.type) return;
+		try {
+			chest.setType(type);
+			if (chest === selectedChest && selectedIndex >= type.capacity)
+				selectedIndex = 0;
+			toastManager.add(new Toast(`Changed to a ${type.name}`, "success"));
+		} catch (e) {
+			toastManager.add(
+				new Toast(e instanceof Error ? e.message : String(e), "failure"),
+			);
+		}
+	};
+
+	const expandBin = (chest: ChestProxy) => {
+		chest.expandMiniShippingBin();
+		toastManager.add(new Toast("Expanded to a 36-slot Chest", "success"));
+	};
 
 	/** Set every item that can have a quality to `quality`, in every chest listed */
 	const setAllQuality = (quality: number, name: string) => {
@@ -184,6 +202,42 @@
 							slots
 						</small>
 					</header>
+					{#if chest.type}
+						<label class="chest-type">
+							<small
+								title="A smaller chest type is only available when all the items fit, so nothing is lost"
+								>Chest type:</small
+							>
+							<select
+								value={chest.type.itemId}
+								onchange={(e) => {
+									changeType(chest, e.currentTarget.value);
+									// Show the real type if the change was refused
+									e.currentTarget.value = chest.type?.itemId ?? "";
+								}}
+								data-testid={`chest-${chestIndex}-type`}
+							>
+								{#each SwappableChests as type (type.itemId)}
+									<option
+										value={type.itemId}
+										disabled={chest.inventory.usedSlots > type.capacity}
+										>{type.name} ({type.capacity} slots)</option
+									>
+								{/each}
+							</select>
+						</label>
+					{:else if chest.isMiniShippingBin}
+						<div class="chest-type">
+							<button
+								type="button"
+								onclick={() => expandBin(chest)}
+								data-testid={`chest-${chestIndex}-expand`}
+								title="It keeps its items, but no longer adds them to the nightly shipment"
+							>
+								Expand to 36 slots (becomes a regular Chest)
+							</button>
+						</div>
+					{/if}
 					<div class="item-grid">
 						{#each slots(chest) as { index, item }}
 							<ItemSlot
@@ -209,8 +263,7 @@
 	{#if selectedChest}
 		<UiContainer>
 			<small class="editing"
-				>Editing: {headings.get(selectedChest) ??
-					selectedChest.metadata.label}</small
+				>Editing: {headings.get(selectedChest) ?? selectedChest.label}</small
 			>
 			<ItemView {selectedItem} {selectedIndex} {createItem} {deleteItem} />
 		</UiContainer>
@@ -298,6 +351,25 @@
 		align-items: baseline;
 		gap: 8px;
 		margin-bottom: 4px;
+	}
+
+	.chest-type {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: 4px;
+	}
+
+	.chest-type select,
+	.chest-type button {
+		font: inherit;
+		font-size: 0.85em;
+		padding: 1px 4px;
+		border: solid 2px #9c613b;
+		border-radius: 4px;
+		background-color: #f9bb65;
+		color: inherit;
+		cursor: pointer;
 	}
 
 	.chest h4 {

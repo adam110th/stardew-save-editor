@@ -83,6 +83,19 @@ describe("Item", () => {
 		});
 	});
 
+	it("resolves big craftables whose IDs clash with objects", () => {
+		withRoot(() => {
+			// Chest (130) and Stone Chest (232) share IDs with Tuna and Rice Pudding
+			for (const name of ["Chest", "Stone Chest", "Big Chest"]) {
+				const item = Item.fromName(name);
+				expect(item.info?.name).toBe(name);
+				expect(item.info?._type).toBe("BigCraftable");
+			}
+			// A real Tuna still resolves as the fish
+			expect(Item.fromName("Tuna").info?._type).toBe("Object");
+		});
+	});
+
 	it("should create a parsnip", () => {
 		withRoot(() => {
 			const item = Item.fromName("Parsnip");

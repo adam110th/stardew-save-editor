@@ -52,7 +52,12 @@ const rawItems = (chest: RawChest): RawItem[] => {
 const chestCapacity = (chest: RawChest) => {
 	const name = chest.name?.toLowerCase();
 	const special = chest.specialChestType?.toLowerCase();
-	if (name === "big chest" || special === "bigchest") return 70;
+	if (
+		name === "big chest" ||
+		name === "big stone chest" ||
+		special === "bigchest"
+	)
+		return 70;
 	if (
 		name === "mini-shipping bin" ||
 		name === "mini shipping bin" ||
@@ -81,6 +86,23 @@ export class ChestInventory extends SvelteMap<number, ItemProxy | undefined> {
 			const entry = entries[index];
 			super.set(index, entry ? createItemProxy(entry) : undefined);
 		}
+	}
+
+	/**
+	    Change how many slots the chest has. Items move up to fill gaps first, so
+	    shrinking only fails if they genuinely don't fit.
+	*/
+	resize(slotCount: number) {
+		const items = [...this.values()].filter((item) => item !== undefined);
+		if (items.length > slotCount)
+			throw new Error(
+				`${items.length} items won't fit in ${slotCount} slots; remove some first`,
+			);
+		super.clear();
+		this.slotCount = slotCount;
+		for (let index = 0; index < slotCount; index++)
+			super.set(index, items[index]);
+		this.syncRawItems();
 	}
 
 	get usedSlots() {
@@ -119,9 +141,46 @@ export class ChestInventory extends SvelteMap<number, ItemProxy | undefined> {
 	}
 }
 
+/**
+    Chests the game lets you swap for one another in place, keeping the
+    contents (the `swappable_chest` tag in Data/BigCraftables).
+*/
+export const SwappableChests = [
+	{ itemId: "130", name: "Chest", sprite: 130, capacity: 36, special: "None" },
+	{
+		itemId: "232",
+		name: "Stone Chest",
+		sprite: 232,
+		capacity: 36,
+		special: "None",
+	},
+	{
+		itemId: "BigChest",
+		name: "Big Chest",
+		sprite: 304,
+		capacity: 70,
+		special: "BigChest",
+	},
+	{
+		itemId: "BigStoneChest",
+		name: "Big Stone Chest",
+		sprite: 328,
+		capacity: 70,
+		special: "BigChest",
+	},
+] as const;
+export type SwappableChest = (typeof SwappableChests)[number];
+
+const MINI_SHIPPING_BIN = "248";
+
 export class ChestProxy implements DataProxy<RawChest> {
 	public [Raw]: RawChest;
 	public readonly inventory: ChestInventory;
+	/** The chest's type, if it's one that can be swapped for another */
+	public type: SwappableChest | undefined;
+	/** Bumped when the chest changes kind, so `label` updates */
+	#name = $state("");
+	readonly #originalName: string;
 
 	constructor(
 		chest: RawChest,
@@ -129,6 +188,58 @@ export class ChestProxy implements DataProxy<RawChest> {
 	) {
 		this[Raw] = chest;
 		this.inventory = new ChestInventory(chest);
+		this.type = $state(
+			SwappableChests.find((t) => t.itemId === String(chest.itemId)),
+		);
+		this.#originalName = String(chest.name ?? "");
+		this.#name = this.#originalName;
+	}
+
+	/** The metadata label, kept up to date if the chest changes kind */
+	get label() {
+		const { label } = this.metadata;
+		return this.#originalName && this.#name !== this.#originalName
+			? label.replace(this.#originalName, this.#name)
+			: label;
+	}
+
+	/** A Mini-Shipping Bin only has 9 slots, fixed by its type */
+	get isMiniShippingBin() {
+		return String(this[Raw].itemId) === MINI_SHIPPING_BIN;
+	}
+
+	/**
+	    Swap this chest for another kind, as the game does when you place one
+	    swappable chest on another: the contents and colour stay. A smaller
+	    kind is only allowed if all the items fit, so nothing is lost.
+	*/
+	setType(type: SwappableChest) {
+		// Shrinking is only allowed when every item fits (resize refuses otherwise)
+		this.inventory.resize(type.capacity);
+		this.#becomeChest(type);
+	}
+
+	/**
+	    Turn a Mini-Shipping Bin into a regular 36-slot Chest. It keeps its
+	    items but stops adding them to the nightly shipment.
+	*/
+	expandMiniShippingBin() {
+		if (!this.isMiniShippingBin) throw new Error("Not a Mini-Shipping Bin");
+		const chest = SwappableChests[0];
+		this.inventory.resize(chest.capacity);
+		this.#becomeChest(chest);
+	}
+
+	#becomeChest(type: SwappableChest) {
+		const raw = this[Raw] as RawChest & Record<string, unknown>;
+		raw.name = type.name;
+		raw.itemId = type.itemId;
+		raw.parentSheetIndex = type.sprite;
+		raw.specialChestType = type.special;
+		// Saved as currentLidFrame; the game expects the frame after the chest's sprite
+		raw.currentLidFrame = type.sprite + 1;
+		this.type = type;
+		this.#name = type.name;
 	}
 }
 
