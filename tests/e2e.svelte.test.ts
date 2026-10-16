@@ -61,8 +61,12 @@ const once = (fn: () => void) => {
 	};
 };
 
-const createPageHarness = async (): Promise<PageHarness> => {
-	const file = await readFile("tests/TestSave");
+// `edit` rewrites the fixture's XML before import, for saves TestSave doesn't cover
+const createPageHarness = async (
+	edit?: (xml: string) => string,
+): Promise<PageHarness> => {
+	const fixture = await readFile("tests/TestSave");
+	const file = edit ? edit(fixture.toString("utf8")) : fixture;
 
 	let saveManager!: SaveManager;
 	let importPromise!: Promise<void>;
@@ -864,6 +868,25 @@ describe("Save Manager Integration Tests", () => {
 			// TestSave is a Hill-top farm (whichFarm 3)
 			expect(values).toContain("Hill-top");
 			expect(values).toContain("390176213");
+		});
+
+		it("names Meadowlands by its farm type ID", async () => {
+			// 1.6 saves Meadowlands and modded farms by ID instead of an index
+			harness.cleanup();
+			harness = await createPageHarness((xml) =>
+				xml.replace(
+					"<whichFarm>3</whichFarm>",
+					"<whichFarm>MeadowlandsFarm</whichFarm>",
+				),
+			);
+			saveManager = harness.saveManager;
+			expect(saveManager.save?.raw.SaveGame.whichFarm).toBe("MeadowlandsFarm");
+
+			const page = harness.render(farmPage);
+			const values = page
+				.getAllByTestId("locked-setting")
+				.map((el) => el.textContent);
+			expect(values).toContain("Meadowlands");
 		});
 	});
 

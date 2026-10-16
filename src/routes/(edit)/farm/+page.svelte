@@ -15,7 +15,7 @@
 	// The new-game presets; any percentage works since the game just multiplies prices by it
 	const profitMarginPresets = [100, 75, 50, 25];
 
-	// whichFarm values; 7 is a custom farm type such as Meadowlands
+	// whichFarm is the index of a vanilla farm type, or the ID of Meadowlands or a modded farm type
 	const farmTypes = [
 		"Standard",
 		"Riverland",
@@ -24,14 +24,20 @@
 		"Wilderness",
 		"Four Corners",
 		"Beach",
-		"Meadowlands (or modded)",
 	];
+	const farmTypeIds: Record<string, string> = {
+		MeadowlandsFarm: "Meadowlands",
+	};
+	const farmType =
+		typeof game.whichFarm === "number"
+			? (farmTypes[game.whichFarm] ?? `Unknown (${game.whichFarm})`)
+			: (farmTypeIds[game.whichFarm] ?? `Custom (${game.whichFarm})`);
 
 	// Set when the farm was created; changing them in an existing save can corrupt or desync it
 	const locked = [
 		[
 			"Farm type",
-			farmTypes[game.whichFarm] ?? `Unknown (${game.whichFarm})`,
+			farmType,
 			"The map layout is fixed. Changing it leaves buildings, crops and objects in invalid spots.",
 		],
 		[
