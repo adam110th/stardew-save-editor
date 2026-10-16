@@ -125,7 +125,33 @@ export const bundleSideEffects = Object.freeze(
 		],
 		[
 			CCRoom.BulletinBoard,
-			makeEffect(MailFlag.ccBulletin, undefined, CCRoom.BulletinBoard),
+			(() => {
+				const room = makeEffect(
+					MailFlag.ccBulletin,
+					undefined,
+					CCRoom.BulletinBoard,
+				);
+				return {
+					// The game rewards the Bulletin Board with a thank-you letter; reading
+					// it gives +2 hearts with every non-marriageable villager
+					// (LetterViewerMenu). Put it in the mailbox unless it's already been read.
+					add: (s, cc) => {
+						room.add(s, cc);
+						for (const player of s.players) {
+							const read =
+								player.mailReceived.has(MailFlag.ccBulletinThankYou) ||
+								player.mailReceived.has(MailFlag.ccBulletinThankYouReceived);
+							if (!read) player.mailbox.add(MailFlag.ccBulletinThankYou);
+						}
+					},
+					remove: (s, cc) => {
+						room.remove(s, cc);
+						// Take back the letter if it hasn't been opened yet
+						for (const player of s.players)
+							player.mailbox.delete(MailFlag.ccBulletinThankYou);
+					},
+				};
+			})(),
 		],
 		[
 			CCRoom.AbandonedJojaMart,
@@ -147,7 +173,6 @@ export const bundleSideEffects = Object.freeze(
 				add: (s) => {
 					applyMail(s, (mail) => {
 						mail.add(MailFlag.ccIsComplete);
-						mail.add(MailFlag.ccBulletinThankYou);
 						// Make sure the player has seen the Junimo Note #83
 						// Otherwise the Junimo will be forever trapped out-of-bounds
 						mail.add(MailFlag.seenJunimoNote);
