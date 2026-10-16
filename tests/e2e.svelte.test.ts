@@ -201,6 +201,36 @@ describe("Save Manager Integration Tests", () => {
 			}
 		});
 
+		it("groups bundles by room and completes a whole room", async () => {
+			const page = harness.render(bundlesPage);
+			flushSync();
+			const membership = page.getByTestId(
+				"joja-membership-checkbox",
+			) as HTMLInputElement;
+			if (membership.checked) await fireEvent.click(membership);
+
+			const rooms = page.getAllByTestId("bundle-room");
+			expect(rooms.map((r) => r.getAttribute("data-room"))).toEqual(
+				expect.arrayContaining(["Pantry", "Crafts Room", "Vault"]),
+			);
+
+			const pantry = rooms.find(
+				(r) => r.getAttribute("data-room") === "Pantry",
+			) as HTMLElement;
+			await fireEvent.click(within(pantry).getByTestId("bundle-room-toggle"));
+			const progress = within(pantry).getByTestId("bundle-room-progress");
+			expect(progress.textContent).toContain("6/6 bundles");
+			expect(saveManager.save?.player.mailReceived.has(MailFlag.ccPantry)).toBe(
+				true,
+			);
+
+			await fireEvent.click(within(pantry).getByTestId("bundle-room-toggle"));
+			expect(progress.textContent).toContain("0/6 bundles");
+			expect(saveManager.save?.player.mailReceived.has(MailFlag.ccPantry)).toBe(
+				false,
+			);
+		});
+
 		it("should toggle Joja membership and set a project", async () => {
 			const page = harness.render(bundlesPage);
 			const membership = page.getByTestId(

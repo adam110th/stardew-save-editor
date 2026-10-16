@@ -23,6 +23,10 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 - ✅ Farm Settings
   - Edit farm name, profit margin (any percentage), monster spawning and mine rewards
   - View settings fixed at farm creation (farm type, random seed, and more)
+- ✅ Community Center
+  - Tick donated items, or complete a whole bundle or room at once
+  - Finished bundles leave their rewards to collect in-game
+  - Joja route: buy Community Development projects instead
 - ✅ Buildings
   - Edit farm animals in barns and coops
   - See each building's description and build cost (gold and materials)
@@ -38,8 +42,6 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 - 🔄 Building management
   - Add new buildings to the farm
 - 🔄 Weather/calendar controls
-- 🔄 Community Center bundle management
-  - Finish the bundles page (currently marked "under construction")
 - 🔄 Quest management
 - 🔄 Fill gaps in existing menus
   - Audit each menu against the save data for editable fields not yet exposed

@@ -68,8 +68,11 @@ export enum BundleName {
 	Enchanter = 33,
 	Dye = 34,
 	Fodder = 35,
-	Vault = 36,
+	Missing = 36,
 }
+
+/** The Abandoned JojaMart's Missing Bundle; its reward entry must stay false */
+const MISSING_BUNDLE = BundleName.Missing;
 
 /**
  * Represents the community bundles in the game, and their current completion status.
@@ -78,6 +81,8 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 	private communityCenter: GameLocation;
 	private saveData: SaveProxy;
 	private hasRunOnce = false;
+	/** Each bundle's completion when side effects last ran, to spot bundles that change */
+	private lastCompletion = new Map<BundleName, boolean>();
 
 	constructor(saveData: SaveProxy) {
 		const cc = saveData.locations.find(
@@ -133,12 +138,21 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 			([room, bundles]) =>
 				[room, bundles.every((b: Bundle) => b.completed)] as const,
 		);
+		const completion = new Map(
+			[...this.entries()].map(([id, b]) => [id, b.completed] as const),
+		);
+		// Re-run when Joja membership changes, so the joja* room flags follow it
+		const isJoja = this.saveData.player.mailReceived.has(MailFlag.JojaMember);
 
 		// Skip side effects on first run (initial load) to preserve existing player mail flags
 		if (!this.hasRunOnce) {
 			this.hasRunOnce = true;
+			this.lastCompletion = completion;
 			return;
 		}
+
+		this.updateRewards(completion);
+		this.lastCompletion = completion;
 
 		// Apply side effects
 		for (const [room, completed] of completedRooms) {
@@ -169,7 +183,6 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 
 			Regression root cause (#80): we previously required AbandonedJojaMart for the non‑Joja branch, so any edit while that room was incomplete caused ccIsComplete & door access to be removed, resealing the door mid‑progress.
 		*/
-		const isJoja = this.saveData.player.mailReceived.has(MailFlag.JojaMember);
 		const overallComplete = isJoja
 			? // Joja route: ignore Abandoned Joja Mart & Bulletin Board (not required / no Joja analog)
 				completedRooms
@@ -204,6 +217,29 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 	}
 
 	/**
+	 * Mirror the game: finishing a bundle leaves its reward waiting in
+	 * bundleRewards, collected from the present in that room's bundle menu.
+	 * Un-finishing a bundle takes back a reward that hasn't been collected.
+	 */
+	private updateRewards(completion: Map<BundleName, boolean>) {
+		const ccRaw = this.communityCenter[Raw] as GameLocationRaw;
+		for (const [id, completed] of completion) {
+			if (this.lastCompletion.get(id) === completed) continue;
+			// The Missing Bundle's reward crashes the game (see sanitizeBundleRewards)
+			if (id === MISSING_BUNDLE && completed) continue;
+
+			ccRaw.bundleRewards ??= { item: [] };
+			const entry = ccRaw.bundleRewards.item.find((kv) => kv.key.int === id);
+			if (entry) entry.value.boolean = completed;
+			else
+				ccRaw.bundleRewards.item.push({
+					key: { int: id },
+					value: { boolean: completed },
+				});
+		}
+	}
+
+	/**
 	 * Ensure Community Center bundleRewards only contains valid keys and that
 	 * problematic entries are corrected. Specifically prevents key 36 from
 	 * being set true, which can crash the game.
@@ -228,7 +264,7 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 
 		// Force key 36 to false as a safety measure
 		for (const kv of rewards.item) {
-			if (kv.key.int === 36 && kv.value.boolean === true) {
+			if (kv.key.int === MISSING_BUNDLE && kv.value.boolean === true) {
 				kv.value.boolean = false;
 				console.warn(
 					"Corrected bundleRewards[36] from true to false to prevent a crash",
@@ -313,6 +349,22 @@ export class Bundle {
 
 	private parse() {
 		return parseBundleValue(this.bundleData.string);
+	}
+
+	/** Tick items until enough are submitted to finish the bundle */
+	complete() {
+		let submitted = this.requiredItems.filter((i) => i.submitted).length;
+		for (const item of this.requiredItems) {
+			if (submitted >= this.requiredItemCount) break;
+			if (item.submitted) continue;
+			item.submitted = true;
+			submitted++;
+		}
+	}
+
+	/** Untick every item */
+	clear() {
+		for (const item of this.requiredItems) item.submitted = false;
 	}
 }
 

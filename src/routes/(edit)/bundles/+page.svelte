@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { CCRoom } from "$lib/bundleSideEffects";
 	import { Raw } from "$lib/proxies";
+	import type { Bundle as BundleProxy } from "$lib/proxies/CommunityBundles.svelte";
 	import { MailFlag } from "$lib/proxies/Mail.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
+	import UiButton from "$lib/ui/UIButton.svelte";
 	import UiCheckbox from "$lib/ui/UICheckbox.svelte";
 	import UiContainer from "$lib/ui/UIContainer.svelte";
 	import Bundle from "./Bundle.svelte";
@@ -11,6 +14,35 @@
 	const bundles = save?.communityBundles;
 	const cc = save?.locations.find((l) => l[Raw].name === "CommunityCenter");
 	if (!save || !bundles) throw new Error("No save data found");
+
+	const roomNames: Record<CCRoom, string> = {
+		[CCRoom.Pantry]: "Pantry",
+		[CCRoom.CraftsRoom]: "Crafts Room",
+		[CCRoom.FishTank]: "Fish Tank",
+		[CCRoom.BoilerRoom]: "Boiler Room",
+		[CCRoom.Vault]: "Vault",
+		[CCRoom.BulletinBoard]: "Bulletin Board",
+		[CCRoom.AbandonedJojaMart]: "Abandoned JojaMart",
+	};
+
+	const rooms = $derived(
+		[...Map.groupBy(bundles.values(), (b) => b.room)]
+			.toSorted(([a], [b]) => a - b)
+			.map(([room, list]) => ({
+				room,
+				name: roomNames[room] ?? `Room ${room}`,
+				bundles: list.toSorted((a, b) => a.id - b.id),
+			})),
+	);
+
+	const isDone = (list: BundleProxy[]) => list.every((b) => b.completed);
+
+	function setRoom(list: BundleProxy[], done: boolean) {
+		for (const bundle of list) {
+			if (done) bundle.complete();
+			else bundle.clear();
+		}
+	}
 
 	let hasJojaMembership = $derived(
 		save.players.some((player) => player.mailReceived.has(MailFlag.JojaMember)),
@@ -34,11 +66,6 @@
 </script>
 
 <UiContainer>
-	<div class="warning">
-		<h2>Under Construction 🏗️</h2>
-		<p>Parts of this page are still being worked on.</p>
-	</div>
-
 	<h1>Community Bundles</h1>
 
 	<!-- Enable or disable Joja Membership -->
@@ -63,9 +90,34 @@
 			<JojaBundles {save} {bundles} />
 		{/if}
 	{:else}
+		<p class="hint">
+			Tick the items that have been donated. Finishing every bundle in a room
+			restores it and unlocks what it normally would (the bus, minecarts,
+			greenhouse and so on). Each finished bundle's reward waits in that room's
+			bundle menu in-game, ready to collect.
+		</p>
+
 		<div class="wrapper" data-testid="bundle-wrapper">
-			{#each Array.from(bundles.values()).toSorted((a, b) => a.id - b.id) as bundle}
-				<Bundle {bundle} />
+			{#each rooms as { room, name, bundles: list } (room)}
+				{@const done = isDone(list)}
+				<section class="room" data-testid="bundle-room" data-room={name}>
+					<header>
+						<h2>{name}</h2>
+						<small data-testid="bundle-room-progress">
+							{list.filter((b) => b.completed).length}/{list.length} bundles
+							{#if done}✅{/if}
+						</small>
+						<UiButton
+							onclick={() => setRoom(list, !done)}
+							data-testid="bundle-room-toggle"
+						>
+							{done ? "Clear room" : "Complete room"}
+						</UiButton>
+					</header>
+					{#each list as bundle (bundle.id)}
+						<Bundle {bundle} />
+					{/each}
+				</section>
 			{/each}
 		</div>
 	{/if}
@@ -79,20 +131,32 @@
 		margin-bottom: 1rem;
 	}
 
-	.warning {
-		background-color: rgba(255, 0, 0, 0.35);
-		border-left: solid 4px rgba(255, 0, 0, 0.7);
-	}
-
-	.warning > * {
-		padding: 0.2rem;
-		padding-left: 0.5rem;
-		margin-block-start: 0.2em;
-		margin-block-end: 0.2em;
+	.hint {
+		font-size: 0.8em;
+		opacity: 0.8;
+		max-width: 60ch;
 	}
 
 	.wrapper {
-		height: 320px;
+		max-height: 60vh;
 		overflow-y: auto;
+	}
+
+	.room header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin: 0.75rem 8px 0;
+		padding-bottom: 4px;
+		border-bottom: 2px solid #0003;
+	}
+
+	.room h2 {
+		margin: 0;
+		font-size: 1.1em;
+	}
+
+	.room header small {
+		flex: 1;
 	}
 </style>
