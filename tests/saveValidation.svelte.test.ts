@@ -52,18 +52,25 @@ describe("validateSave", () => {
 			"unique ID",
 		],
 		[
-			"a player with no name",
+			"a unique ID the game can't read",
 			(p: Parsed) => {
-				p.SaveGame.player.name = "";
+				p.SaveGame.uniqueIDForThisGame = "";
 			},
-			"has no name",
+			"unique ID",
 		],
 		[
-			"negative money",
+			"money the game can't read",
 			(p: Parsed) => {
-				p.SaveGame.player.money = -5;
+				p.SaveGame.player.money = 2 ** 31;
 			},
-			"money (-5) is out of range",
+			"money (2147483648) is out of range",
+		],
+		[
+			"blank money",
+			(p: Parsed) => {
+				p.SaveGame.player.money = "";
+			},
+			"money () is out of range",
 		],
 		[
 			"a missing Farm",
@@ -171,15 +178,43 @@ describe("validateSave", () => {
 		});
 	});
 
-	it("only warns about things the game can load", async () => {
+	it.each([
+		[
+			"a farm with no name",
+			(p: Parsed) => {
+				p.SaveGame.player.farmName = "";
+			},
+			"The farm has no name",
+		],
+		[
+			"a main player with no name",
+			(p: Parsed) => {
+				p.SaveGame.player.name = "";
+			},
+			"The main player has no name",
+		],
+		[
+			"negative money",
+			(p: Parsed) => {
+				p.SaveGame.player.money = -5;
+			},
+			"money (-5) is negative",
+		],
+	])("only warns about %s", async (_, breakIt, message) => {
 		const parsed = await loadParsed();
-		parsed.SaveGame.player.farmName = "";
+		breakIt(parsed);
+		const result = validateSave(parsed);
+		expect(result.valid).toBe(true);
+		expect(result.warnings.join("\n")).toContain(message);
+	});
+
+	it("only warns about snow outside winter", async () => {
+		const parsed = await loadParsed();
 		parsed.SaveGame.isSnowing = true;
 		const result = validateSave(parsed);
 		expect(result.valid).toBe(true);
 		expect(result.warnings).toEqual([
 			"It's snowing in spring, and only snows in winter",
-			"The farm has no name",
 		]);
 	});
 
@@ -187,18 +222,38 @@ describe("validateSave", () => {
 		["day 29", { dayOfMonth: 29 }, "The day of the month (29) isn't 1 to 28"],
 		["day 0", { dayOfMonth: 0 }, "The day of the month (0) isn't 1 to 28"],
 		["year 0", { year: 0 }, "The year (0) is less than 1"],
-	])("warns about %s, a date the game never makes", async (_, date, message) => {
-		const parsed = await loadParsed();
-		Object.assign(parsed.SaveGame, date);
-		const result = validateSave(parsed);
-		expect(result.valid).toBe(true);
-		expect(result.warnings).toEqual([message]);
-	});
+	])(
+		"warns about %s, a date the game never makes",
+		async (_, date, message) => {
+			const parsed = await loadParsed();
+			Object.assign(parsed.SaveGame, date);
+			const result = validateSave(parsed);
+			expect(result.valid).toBe(true);
+			expect(result.warnings).toEqual([message]);
+		},
+	);
 
 	it("reads the season as the game does, ignoring case", async () => {
 		const parsed = await loadParsed();
 		parsed.SaveGame.currentSeason = "Summer";
 		expect(validateSave(parsed).valid).toBe(true);
+	});
+
+	it("accepts a restored Abandoned Joja Mart (7 rooms)", async () => {
+		const parsed = await loadParsed();
+		locationNamed(parsed, "CommunityCenter").areasComplete.boolean.push(true);
+		expect(validateSave(parsed).valid).toBe(true);
+	});
+
+	it("accepts unclaimed cabins, whose farmhands have no name", async () => {
+		const parsed = await loadParsed();
+		const unclaimed = { ...structuredClone(parsed.SaveGame.player), name: "" };
+		parsed.SaveGame.farmhands = { Farmer: [unclaimed] };
+		expect(validateSave(parsed)).toEqual({
+			valid: true,
+			errors: [],
+			warnings: [],
+		});
 	});
 
 	it("summarises the first problems", () => {
@@ -234,7 +289,8 @@ describe("SaveManager validation", () => {
 
 		const save = saveManager.save;
 		if (!save) throw new Error("No save");
-		save[Raw].SaveGame.player.money = -1;
+		// More than the game's int can hold
+		save[Raw].SaveGame.player.money = 2 ** 31;
 		const bad = await saveManager.validatedExport();
 		expect(bad.validation.valid).toBe(false);
 		await expect(saveManager.download()).rejects.toThrow(

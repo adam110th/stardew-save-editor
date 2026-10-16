@@ -11,7 +11,9 @@ export interface SaveValidation {
 	warnings: string[];
 }
 
-const SUPPORTED_VERSIONS = ["1.6"];
+export const SUPPORTED_VERSIONS = ["1.6"];
+// Money is an `int` in the game, so it can't read anything outside this range
+const INT32_MIN = -2_147_483_648;
 const INT32_MAX = 2_147_483_647;
 const UINT32_MAX = 4_294_967_295;
 const VALID_QUALITIES = new Set([0, 1, 2, 4]);
@@ -31,9 +33,17 @@ const asArray = (value: unknown): unknown[] =>
 			? []
 			: [value];
 
-const isWholeNumber = (value: unknown) =>
-	(typeof value === "number" && Number.isInteger(value)) ||
-	(typeof value === "string" && /^-?\d+$/.test(value));
+/** A whole number, as the game's XML reader would accept it */
+const toInteger = (value: unknown) => {
+	if (typeof value === "number")
+		return Number.isInteger(value) ? value : undefined;
+	if (typeof value === "string" && /^\s*-?\d+\s*$/.test(value))
+		return Number(value);
+	return undefined;
+};
+
+const isWholeNumber = (value: unknown) => toInteger(value) !== undefined;
+const isTrue = (value: unknown) => value === true || value === "true";
 
 /** Walk every object in the save, calling `visit` on each one that looks like an item */
 function forEachItem(node: unknown, visit: (item: Json) => void) {
@@ -65,8 +75,9 @@ export function validateSave(parsed: unknown): SaveValidation {
 	if (!SUPPORTED_VERSIONS.some((v) => version.startsWith(v)))
 		errors.push(`Unsupported game version "${version || "missing"}"`);
 
-	if (!Number.isFinite(Number(game.uniqueIDForThisGame)))
-		errors.push("Missing the save's unique ID (uniqueIDForThisGame)");
+	const id = toInteger(game.uniqueIDForThisGame);
+	if (id === undefined || id < 0)
+		errors.push("Missing or invalid unique ID (uniqueIDForThisGame)");
 
 	// Date: the game won't load a season it can't parse (Game1.currentSeason).
 	// Days outside 1-28 and year 0 load, but are dates the game never makes.
@@ -89,18 +100,26 @@ export function validateSave(parsed: unknown): SaveValidation {
 	if (!isObject(player)) {
 		errors.push("Missing the main player");
 	} else {
+		if (!String(player.name ?? "").trim())
+			warnings.push("The main player has no name");
+		if (!String(player.farmName ?? "").trim())
+			warnings.push("The farm has no name");
+
+		// Unclaimed cabins have a farmhand with no name, which is normal
 		const farmhands = isObject(game.farmhands)
-			? asArray(game.farmhands.Farmer)
+			? asArray(game.farmhands.Farmer).filter(isObject)
 			: [];
 		for (const [i, farmer] of [player, ...farmhands].entries()) {
-			if (!isObject(farmer)) continue;
-			const who = i === 0 ? "The main player" : `Farmhand ${i}`;
-			const name = String(farmer.name ?? "").trim();
-			if (!name) errors.push(`${who} has no name`);
-			const label = name || who;
-			const money = Number(farmer.money);
-			if (!Number.isInteger(money) || money < 0 || money > INT32_MAX)
-				errors.push(`${label}'s money (${farmer.money}) is out of range`);
+			const label =
+				String(farmer.name ?? "").trim() ||
+				(i === 0 ? "The main player" : `Farmhand ${i}`);
+			if ("money" in farmer) {
+				const money = toInteger(farmer.money);
+				if (money === undefined || money < INT32_MIN || money > INT32_MAX)
+					errors.push(`${label}'s money (${farmer.money}) is out of range`);
+				else if (money < 0)
+					warnings.push(`${label}'s money (${money}) is negative`);
+			}
 			// Stats are unsigned ints (Stats.Values), which can't be read back otherwise
 			const stats =
 				isObject(farmer.stats) && isObject(farmer.stats.Values)
@@ -110,16 +129,11 @@ export function validateSave(parsed: unknown): SaveValidation {
 				const value = isObject(stat.value) ? stat.value.unsignedInt : undefined;
 				if (value === undefined) continue;
 				const key = isObject(stat.key) ? String(stat.key.string) : "?";
-				if (
-					!isWholeNumber(value) ||
-					Number(value) < 0 ||
-					Number(value) > UINT32_MAX
-				)
+				const number = toInteger(value);
+				if (number === undefined || number < 0 || number > UINT32_MAX)
 					errors.push(`${label}'s ${key} stat (${value}) is out of range`);
 			}
 		}
-		if (!String(player.farmName ?? "").trim())
-			warnings.push("The farm has no name");
 	}
 
 	// Locations
@@ -148,9 +162,9 @@ export function validateSave(parsed: unknown): SaveValidation {
 			? asArray(cc.bundleRewards.item).filter(isObject)
 			: [];
 		for (const reward of rewards) {
-			const key = isObject(reward.key) ? Number(reward.key.int) : Number.NaN;
+			const key = isObject(reward.key) ? toInteger(reward.key.int) : undefined;
 			const value = isObject(reward.value) ? reward.value.boolean : undefined;
-			if (key === MISSING_BUNDLE && (value === true || value === "true"))
+			if (key === MISSING_BUNDLE && isTrue(value))
 				errors.push(
 					"The Missing Bundle has a reward waiting, which crashes the game",
 				);

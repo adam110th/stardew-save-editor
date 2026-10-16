@@ -151,6 +151,8 @@ export function sortSlots(slots: SortableSlots) {
 		const item = slots.get(index);
 		if (item) items.push(item);
 	}
+	// Leave empty containers exactly as they were saved
+	if (!items.length) return;
 
 	const tools = items.filter((item) =>
 		TOOL_TYPES.has(raw(item)["@_xsi:type"] ?? ""),

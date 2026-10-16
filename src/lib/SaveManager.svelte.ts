@@ -8,13 +8,13 @@ import { SaveProxy } from "$lib/proxies/SaveFile.svelte";
 import {
 	describeProblems,
 	type SaveValidation,
+	SUPPORTED_VERSIONS,
 	validateSave,
 } from "$lib/saveValidation";
 import type { XMLManager } from "$lib/workers/xml";
 import { nestedArrayTags } from "./workers/jank";
 
 const SAVE_KEY = Symbol("saveManager");
-const SUPPORTED_VERSIONS = ["1.6"];
 
 // XML Manager singleton
 let xmlManager: Comlink.Remote<XMLManager> | XMLManager | undefined;
@@ -260,6 +260,7 @@ export class SaveManager {
 		}
 		this.save = undefined;
 		this.filename = "";
+		this.loadValidation = undefined;
 		this.saveDevState();
 	}
 }

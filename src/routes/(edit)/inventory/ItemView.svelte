@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ItemNameHelper } from "$lib/ItemData";
+	import { ItemDescription, ItemNameHelper } from "$lib/ItemData";
 	import type { ParentIndex } from "$lib/ItemParentIndex";
 	import { Raw } from "$lib/proxies";
 	import { Color } from "$lib/proxies/Color.svelte";
@@ -48,12 +48,7 @@
 
 	const save = getSaveManager().save;
 
-	// Unresolved `[LocalizedText ...]` tokens mean the description wasn't generated
-	let description = $derived(
-		selectedItem?.info?.description?.startsWith("[LocalizedText ")
-			? undefined
-			: selectedItem?.info?.description,
-	);
+	let description = $derived(ItemDescription(selectedItem?.info));
 
 	// Trinket stats are rolled from their seed by the game, so editing them picks a new seed
 	let trinketCtx: TrinketRollContext = $derived({

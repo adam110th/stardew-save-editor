@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ItemData } from "$lib/ItemData";
+	import { ItemData, ItemDescription } from "$lib/ItemData";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import type { Recipes } from "$lib/proxies/Recipes.svelte";
 	import UiCheckbox from "$lib/ui/UICheckbox.svelte";
@@ -17,12 +17,9 @@
 
 	let filter = $state("");
 
-	// Unresolved `[LocalizedText ...]` tokens mean the description wasn't generated
+	// Describe a recipe by the item it makes
 	function describe(recipe: string) {
-		const description = ItemData.get(
-			recipeMapping.get(recipe) ?? recipe,
-		)?.description;
-		return description?.startsWith("[LocalizedText ") ? undefined : description;
+		return ItemDescription(ItemData.get(recipeMapping.get(recipe) ?? recipe));
 	}
 	let regex = $derived.by(() => searchRegexp(filter));
 
