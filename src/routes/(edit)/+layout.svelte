@@ -4,6 +4,7 @@
 	import { resolve } from "$app/paths";
 	import { getSaveManager, SaveValidationError } from "$lib/SaveManager.svelte";
 	import { getToastManager, Toast } from "$lib/ToastManager.svelte";
+	import Tooltip from "$lib/ui/Tooltip.svelte";
 	import UiButton from "$lib/ui/UIButton.svelte";
 	import CharacterPreview from "./appearance/CharacterPreview.svelte";
 	import Router from "./Router.svelte";
@@ -83,13 +84,15 @@
 					data-testid="previous-character"
 					>⬅️
 				</UiButton>
-				<div
-					class="current-character"
-					title={saveManager.save.player.name}
-					data-testid="current-character"
-				>
-					<CharacterPreview player={saveManager.save.player} />
-				</div>
+				<Tooltip text={saveManager.save.player.name ?? ""}>
+					<div
+						class="current-character"
+						aria-label={`Current character: ${saveManager.save.player.name}`}
+						data-testid="current-character"
+					>
+						<CharacterPreview player={saveManager.save.player} />
+					</div>
+				</Tooltip>
 				<UiButton
 					alt={`Next Character: ${saveManager.save.nextPlayer?.name ?? ""}`}
 					onclick={() => saveManager.save?.nextFarmer()}

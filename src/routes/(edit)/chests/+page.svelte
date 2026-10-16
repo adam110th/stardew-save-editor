@@ -5,6 +5,13 @@
 		chestColor,
 		chestGroup,
 	} from "$lib/chestGroups";
+	import {
+		moveItem,
+		moveItems,
+		type SlotRef,
+		sameSlot,
+		sortChest,
+	} from "$lib/chestMoves";
 	import { type ChestProxy, SwappableChests } from "$lib/proxies/Chest.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
@@ -14,6 +21,7 @@
 		setItemQuality,
 	} from "$lib/setItemQuality";
 	import { getToastManager, Toast } from "$lib/ToastManager.svelte";
+	import SortButton from "$lib/ui/SortButton.svelte";
 	import UiContainer from "$lib/ui/UIContainer.svelte";
 	import UiSelect from "$lib/ui/UISelect.svelte";
 	import ItemSlot from "../inventory/ItemSlot.svelte";
@@ -45,16 +53,112 @@
 
 	let chestList = $state<HTMLElement>();
 
+	/** Items picked with Ctrl/Cmd+click, to drag several at once */
+	let picked = $state<SlotRef[]>([]);
+	const multiSelected = $derived(picked.length > 1);
+	const isPicked = (chest: ChestProxy, index: number) =>
+		picked.some((ref) => sameSlot(ref, { chest, index }));
+
 	const selectGroup = (id: ChestGroupId) => {
 		selectedGroupId = id;
 		if (chestList) chestList.scrollTop = 0;
 		selectedChest = groups.find((g) => g.id === id)?.chests[0];
 		selectedIndex = 0;
+		picked = [];
 	};
 
-	const select = (chest: ChestProxy, index: number) => {
+	const select = (chest: ChestProxy, index: number, event?: MouseEvent) => {
+		if (event?.ctrlKey || event?.metaKey) {
+			// Only items can be picked; start from whatever was selected before
+			if (!chest.inventory.get(index)) return;
+			const next =
+				picked.length || !selectedChest?.inventory.get(selectedIndex)
+					? [...picked]
+					: [{ chest: selectedChest, index: selectedIndex }];
+			const at = next.findIndex((ref) => sameSlot(ref, { chest, index }));
+			if (at >= 0) next.splice(at, 1);
+			else next.push({ chest, index });
+			picked = next;
+		} else {
+			picked = [];
+		}
 		selectedChest = chest;
 		selectedIndex = index;
+	};
+
+	// Drag and drop: one item onto a slot (moving or swapping), or onto a chest
+	let dragging: SlotRef[] | undefined;
+
+	const dragStart = (chest: ChestProxy, index: number, event: DragEvent) => {
+		if (!chest.inventory.get(index)) return event.preventDefault();
+		dragging =
+			multiSelected && isPicked(chest, index)
+				? [...picked]
+				: [{ chest, index }];
+		event.dataTransfer?.setData("text/plain", "chest-item");
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+	};
+
+	const allowDrop = (event: DragEvent) => {
+		if (dragging) event.preventDefault();
+	};
+
+	const chestName = (chest: ChestProxy) => headings.get(chest) ?? chest.label;
+
+	/** Drop several items into a chest's empty slots, or warn if they won't fit */
+	const dropMany = (refs: SlotRef[], target: ChestProxy) => {
+		const result = moveItems(refs, target);
+		if (!result.ok) {
+			// Keep the selection so it can be dropped somewhere with more room
+			toastManager.add(
+				new Toast(
+					`${result.needed} items won't fit: ${chestName(target)} has ${result.free} free slot${result.free === 1 ? "" : "s"}`,
+					"failure",
+				),
+			);
+			return;
+		}
+		if (refs.length > 1) picked = result.moved;
+		const first = result.moved[0];
+		if (first) {
+			selectedChest = first.chest;
+			selectedIndex = first.index;
+		}
+	};
+
+	const dropOnSlot = (chest: ChestProxy, index: number, event: DragEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		const refs = dragging;
+		dragging = undefined;
+		const [from] = refs ?? [];
+		if (!refs || !from) return;
+		if (refs.length > 1) return dropMany(refs, chest);
+		moveItem(from, { chest, index });
+		picked = [];
+		selectedChest = chest;
+		selectedIndex = index;
+	};
+
+	const dropOnChest = (chest: ChestProxy, event: DragEvent) => {
+		event.preventDefault();
+		const refs = dragging;
+		dragging = undefined;
+		if (refs) dropMany(refs, chest);
+	};
+
+	const sort = (chest: ChestProxy) => {
+		sortChest(chest);
+		picked = [];
+		toastManager.add(new Toast(`Sorted ${chestName(chest)}`, "success"));
+	};
+
+	const sortAll = () => {
+		for (const chest of save.chests) sortChest(chest);
+		picked = [];
+		toastManager.add(
+			new Toast(`Sorted all ${save.chests.length} chests`, "success"),
+		);
 	};
 
 	const slots = (chest: ChestProxy) =>
@@ -149,7 +253,14 @@
 	</UiContainer>
 {:else}
 	<UiContainer>
-		<h3>Chests</h3>
+		<div class="title">
+			<h3>Chests</h3>
+			<SortButton
+				label="Sort all chests"
+				onclick={sortAll}
+				data-testid="sort-all-chests"
+			/>
+		</div>
 		<label class="picker">
 			<span hidden>Container group</span>
 			<UiSelect
@@ -194,6 +305,9 @@
 					class:colored={color}
 					style:--chest-color={color?.css}
 					data-testid="chest-section"
+					aria-label={headings.get(chest)}
+					ondragover={allowDrop}
+					ondrop={(e) => dropOnChest(chest, e)}
 				>
 					<header>
 						<h4>{headings.get(chest)}</h4>
@@ -201,6 +315,12 @@
 							{chest.inventory.usedSlots} / {chest.inventory.slotCount} occupied
 							slots
 						</small>
+						<SortButton
+							label="Sort this chest"
+							nativeTooltip
+							onclick={() => sort(chest)}
+							data-testid={`sort-chest-${chestIndex}`}
+						/>
 					</header>
 					{#if chest.type}
 						<label class="chest-type">
@@ -241,11 +361,22 @@
 					<div class="item-grid">
 						{#each slots(chest) as { index, item }}
 							<ItemSlot
-								active={chest === selectedChest && index === selectedIndex}
+								active={multiSelected
+									? isPicked(chest, index)
+									: chest === selectedChest && index === selectedIndex}
 								data-testid={`chest-${chestIndex}-item-${index}`}
-								onclick={() => select(chest, index)}
+								onclick={(e) => select(chest, index, e)}
+								ondragover={allowDrop}
+								ondrop={(e) => dropOnSlot(chest, index, e)}
 							>
-								<div class="item">
+								<div
+									class="item"
+									draggable={item !== undefined}
+									ondragstart={(e) => dragStart(chest, index, e)}
+									ondragend={() => (dragging = undefined)}
+									role="presentation"
+									data-testid={`chest-${chestIndex}-drag-${index}`}
+								>
 									<ItemSprite {item} />
 								</div>
 							</ItemSlot>
@@ -260,7 +391,20 @@
 		</div>
 	</UiContainer>
 
-	{#if selectedChest}
+	{#if multiSelected}
+		<UiContainer>
+			<div class="picked" data-testid="chest-multi-selection">
+				<strong>{picked.length} items selected</strong>
+				<small>
+					Drag them onto another chest to move them together, or Ctrl+click an
+					item to add or remove it.
+				</small>
+				<button type="button" onclick={() => (picked = [])}>
+					Clear selection
+				</button>
+			</div>
+		</UiContainer>
+	{:else if selectedChest}
 		<UiContainer>
 			<small class="editing"
 				>Editing: {headings.get(selectedChest) ?? selectedChest.label}</small
@@ -271,6 +415,30 @@
 {/if}
 
 <style>
+	.title {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.picked {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+	}
+
+	.picked button {
+		font: inherit;
+		font-size: 0.85em;
+		padding: 2px 8px;
+		border: solid 2px #9c613b;
+		border-radius: 4px;
+		background-color: #f9bb65;
+		color: inherit;
+		cursor: pointer;
+	}
+
 	.picker {
 		display: flex;
 		flex-direction: column;
@@ -348,7 +516,7 @@
 	.chest header {
 		display: flex;
 		justify-content: space-between;
-		align-items: baseline;
+		align-items: center;
 		gap: 8px;
 		margin-bottom: 4px;
 	}
