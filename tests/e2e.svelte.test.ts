@@ -213,9 +213,21 @@ describe("Save Manager Integration Tests", () => {
 			if (membership.checked) await fireEvent.click(membership);
 
 			const rooms = page.getAllByTestId("bundle-room");
-			expect(rooms.map((r) => r.getAttribute("data-room"))).toEqual(
-				expect.arrayContaining(["Pantry", "Crafts Room", "Vault"]),
-			);
+			expect(rooms.map((r) => r.getAttribute("data-room"))).toEqual([
+				"Crafts Room",
+				"Pantry",
+				"Fish Tank",
+				"Boiler Room",
+				"Bulletin Board",
+				"Vault",
+				"Abandoned JojaMart",
+			]);
+			// Each room shows what restoring it unlocks
+			const rewards = page
+				.getAllByTestId("bundle-room-reward")
+				.map((r) => r.textContent ?? "");
+			expect(rewards[1]).toContain("Greenhouse");
+			expect(rewards[5]).toContain("Bus repair");
 
 			const pantry = rooms.find(
 				(r) => r.getAttribute("data-room") === "Pantry",

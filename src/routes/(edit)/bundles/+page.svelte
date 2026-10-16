@@ -15,22 +15,69 @@
 	const cc = save?.locations.find((l) => l[Raw].name === "CommunityCenter");
 	if (!save || !bundles) throw new Error("No save data found");
 
-	const roomNames: Record<CCRoom, string> = {
-		[CCRoom.Pantry]: "Pantry",
-		[CCRoom.CraftsRoom]: "Crafts Room",
-		[CCRoom.FishTank]: "Fish Tank",
-		[CCRoom.BoilerRoom]: "Boiler Room",
-		[CCRoom.Vault]: "Vault",
-		[CCRoom.BulletinBoard]: "Bulletin Board",
-		[CCRoom.AbandonedJojaMart]: "Abandoned JojaMart",
+	// Rooms in the order the game lists them, with what restoring each one unlocks
+	const roomInfo: Record<
+		CCRoom,
+		{ name: string; icon: string; reward: string; note?: string }
+	> = {
+		[CCRoom.CraftsRoom]: {
+			name: "Crafts Room",
+			icon: "🌿",
+			reward: "Bridge repair (to the Quarry)",
+		},
+		[CCRoom.Pantry]: {
+			name: "Pantry",
+			icon: "🥕",
+			reward: "Greenhouse restored",
+		},
+		[CCRoom.FishTank]: {
+			name: "Fish Tank",
+			icon: "🐟",
+			reward: "Glittering boulder removed (above the Mines)",
+		},
+		[CCRoom.BoilerRoom]: {
+			name: "Boiler Room",
+			icon: "🔥",
+			reward: "Minecart repair (fast travel)",
+		},
+		[CCRoom.BulletinBoard]: {
+			name: "Bulletin Board",
+			icon: "📌",
+			reward:
+				"Friendship boost (+2 hearts with all non-marriageable villagers)",
+			note: "In-game this comes from a thank-you letter, which the editor doesn't send. Raise friendships on the Relationships page instead.",
+		},
+		[CCRoom.Vault]: {
+			name: "Vault",
+			icon: "💰",
+			reward: "Bus repair (to the Calico Desert)",
+		},
+		[CCRoom.AbandonedJojaMart]: {
+			name: "Abandoned JojaMart",
+			icon: "🎬",
+			reward: "Movie Theater",
+		},
 	};
+	const roomOrder = [
+		CCRoom.CraftsRoom,
+		CCRoom.Pantry,
+		CCRoom.FishTank,
+		CCRoom.BoilerRoom,
+		CCRoom.BulletinBoard,
+		CCRoom.Vault,
+		CCRoom.AbandonedJojaMart,
+	];
 
 	const rooms = $derived(
 		[...Map.groupBy(bundles.values(), (b) => b.room)]
-			.toSorted(([a], [b]) => a - b)
+			.toSorted(([a], [b]) => roomOrder.indexOf(a) - roomOrder.indexOf(b))
 			.map(([room, list]) => ({
 				room,
-				name: roomNames[room] ?? `Room ${room}`,
+				...(roomInfo[room] ?? {
+					name: `Room ${room}`,
+					icon: "📦",
+					reward: "",
+				}),
 				bundles: list.toSorted((a, b) => a.id - b.id),
 			})),
 	);
@@ -92,21 +139,29 @@
 	{:else}
 		<p class="hint">
 			Tick the items that have been donated. Finishing every bundle in a room
-			restores it and unlocks what it normally would (the bus, minecarts,
-			greenhouse and so on). Each finished bundle's reward waits in that room's
-			bundle menu in-game, ready to collect.
+			restores it and unlocks its reward, shown under each room. Each finished
+			bundle's reward waits in that room's bundle menu in-game, ready to
+			collect.
 		</p>
 
 		<div class="wrapper" data-testid="bundle-wrapper">
-			{#each rooms as { room, name, bundles: list } (room)}
+			{#each rooms as { room, name, icon, reward, note, bundles: list } (room)}
 				{@const done = isDone(list)}
-				<section class="room" data-testid="bundle-room" data-room={name}>
+				<section
+					class="room"
+					class:done
+					data-testid="bundle-room"
+					data-room={name}
+				>
 					<header>
-						<h2>{name}</h2>
-						<small data-testid="bundle-room-progress">
-							{list.filter((b) => b.completed).length}/{list.length} bundles
-							{#if done}✅{/if}
-						</small>
+						<span class="room-icon" aria-hidden="true">{icon}</span>
+						<div class="room-title">
+							<h2>{name}</h2>
+							<small data-testid="bundle-room-progress">
+								{list.filter((b) => b.completed).length}/{list.length} bundles
+								{#if done}· Restored ✅{/if}
+							</small>
+						</div>
 						<UiButton
 							onclick={() => setRoom(list, !done)}
 							data-testid="bundle-room-toggle"
@@ -114,6 +169,13 @@
 							{done ? "Clear room" : "Complete room"}
 						</UiButton>
 					</header>
+					{#if reward}
+						<p class="room-reward" data-testid="bundle-room-reward">
+							🎁 <strong>Reward:</strong>
+							{reward}
+							{#if note}<br /><small class="room-note">{note}</small>{/if}
+						</p>
+					{/if}
 					{#each list as bundle (bundle.id)}
 						<Bundle {bundle} />
 					{/each}
@@ -142,13 +204,36 @@
 		overflow-y: auto;
 	}
 
+	.room {
+		margin: 12px 4px;
+		padding: 4px 4px 8px;
+		border: 2px solid #b14e0544;
+		border-radius: 8px;
+		background: #fff3dc55;
+	}
+
+	.room.done {
+		border-color: #3c8d2f88;
+		background: #d8f0c855;
+	}
+
 	.room header {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		margin: 0.75rem 8px 0;
+		margin: 4px 8px 0;
 		padding-bottom: 4px;
 		border-bottom: 2px solid #0003;
+	}
+
+	.room-icon {
+		font-size: 1.6em;
+	}
+
+	.room-title {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.room h2 {
@@ -156,7 +241,12 @@
 		font-size: 1.1em;
 	}
 
-	.room header small {
-		flex: 1;
+	.room-reward {
+		margin: 6px 12px 0;
+		font-size: 0.85em;
+	}
+
+	.room-note {
+		opacity: 0.75;
 	}
 </style>
