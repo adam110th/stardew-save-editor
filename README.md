@@ -11,7 +11,10 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
 
 - ✅ Character Customization
   - Edit appearance, name, and farm name
-  - Modify skills and money, and Mastery XP (it can't go below what claimed masteries cost)
+  - Modify skills, professions and money, and Mastery XP (it can't go below what claimed masteries
+    cost)
+  - Edit max health and stamina, Qi Gems, Qi Coins, Golden Walnuts, hay and the deepest mine level,
+    and unlock wallet items
   - Upgrade the backpack (12, 24 or 36 slots), the trash can, and the house: Robin's countdown is
     set, so the game does the upgrade overnight and moves the furniture itself (or cancel one she's
     started)
@@ -21,8 +24,19 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
     then the universal loves they don't override (such as Prismatic Shard and Stardrop Tea). Search
     by name, description or loved gift
 - ✅ Inventory Management  
-  - Add/remove items
-  - Modify existing items, including boots' defense and immunity
+  - Add/remove items, drag them between backpack slots, and sort the backpack as the game's Organize
+    button does
+  - Change the equipped rings, boots, hat, shirt, pants and trinket
+  - Modify existing items: amount, quality, price, color, weapon and trinket stats, a bottomless
+    watering can, and boots' defense and immunity
+- ✅ Chests
+  - Edit the items in chests and fridges (except Junimo Chests), grouped into chests, fridges and
+    Ginger Island ones
+  - Drag items between chests, or Ctrl+click several to move them together, and sort one chest or
+    all of them
+  - Change a chest's type (Chest, Stone Chest, Big Chest or Big Stone Chest; a smaller one only when
+    the items fit), or turn a Mini-Shipping Bin into a 36-slot chest
+  - Set the quality of every item in a group at once
 - ✅ Recipe Management
   - Unlock cooking recipes
   - Unlock crafting recipes
@@ -50,27 +64,35 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
     with the incubator and the things the game moves inside handled as Robin's upgrade does. A downgrade
     needs the animals to fit, moves those things back, and says if anything couldn't go back
   - See each building's description and build cost (gold and materials)
-- ✅ Quest Log
+- ✅ Quests
   - See each quest in the journal with its description, objective, reward and days left
   - Mark quests complete as the game does (gold waits in the journal to collect in-game, the next
     story quest starts, and Help Wanted quests count toward Prize Tickets), or remove them
   - Change a quest's gold reward, and how many days a Help Wanted quest has left
-- ✅ Event management
+  - Choose which of Mr. Qi's challenges the Walnut Room board offers (up to 2), make one active, or
+    cancel one that's in progress
+- ✅ Event Management
   - See which events (cutscenes) each farmer has seen, named from the
     [List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs)
   - Untick a heart event to watch it again, or tick a cutscene to skip it
   - Search, group by villager or location, and add or remove any event ID (e.g. from mods)
 - ✅ Save Management
-  - Switch between farmhands
-  - Automatic save backups
+  - Switch between farmers to edit each one, and drag them into a new order on the Farmhands page
+    (the first is the host)
+  - Saves are checked on upload, and again before download, for problems that would stop the game
+    loading them or crash it
+  - A reminder to keep a copy of the game's save before downloading the edited one
+  - Automatic save backups in the browser, to download or delete from the Backups page
   - Cross-platform support
 
 See [docs/menu-audit.md](docs/menu-audit.md) for what each menu can edit, and what's left out on
-purpose (and why).
+purpose (and why). The fork has had a full code and security review: see
+[docs/code-review.md](docs/code-review.md) for what was fixed, and what was checked and left as it is.
 
 ### Planned Features
 
-- 🔄 Full code and security review of this fork
+Everything planned so far is done. Have an idea?
+[Open a feature request](https://github.com/adam110th/stardew-save-editor/issues/new/choose).
 
 ## Usage
 
@@ -103,4 +125,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup and contri
 
 ## Legal
 
-This project uses assets from Stardew Valley under Fair Use. These assets are owned by ConcernedApe and are not covered by this project's license. Villager descriptions and event names come from the Stardew Valley Wiki (CC BY-NC-SA 3.0) and the Stardew Modding Wiki (CC BY-SA 4.0), and keep those licenses. See [LICENSE.md](./LICENSE.md) for details.
+This project uses assets from Stardew Valley under Fair Use. These assets are owned by ConcernedApe and are not covered by this project's license. Villager descriptions, and event names and descriptions, come from the Stardew Valley Wiki (CC BY-NC-SA 3.0) and the Stardew Modding Wiki (CC BY-SA 4.0), and keep those licenses. See [LICENSE.md](./LICENSE.md) for details.
