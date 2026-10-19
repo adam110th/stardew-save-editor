@@ -12,11 +12,14 @@
 	const save = getSaveManager().save;
 	if (!save) throw new Error("No save data found");
 	const player = $derived(save.player);
-	// Sorted by points, but only when villagers are added or the farmer changes:
-	// re-sorting as points are edited would move the row being typed in, losing focus
+	// Sorted by points, but only when villagers are added, replaced or removed, or
+	// the farmer changes: re-sorting as points are edited would move the row being
+	// typed in, losing focus
 	const friendships = $derived.by(() => {
 		const all = player.friendships;
-		if (all.size === 0) return [];
+		// Reads every entry, so replacing a villager counts too (keys() alone can
+		// miss that); their points are only read untracked, when sorting
+		all.entries();
 		return untrack(() => Array.from(all));
 	});
 	let search = $state("");

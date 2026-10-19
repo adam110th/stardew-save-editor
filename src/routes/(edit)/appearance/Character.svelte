@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from "svelte";
 	import { asset } from "$app/paths";
 	import {
 		PrimaryBootColors,
@@ -9,7 +10,7 @@
 		TertiaryBootColors,
 		TertiarySkinColors,
 	} from "$lib/CharacterColors";
-	import { Raw } from "$lib/proxies";
+	import { Dispose, Raw } from "$lib/proxies";
 	import { Color } from "$lib/proxies/Color.svelte";
 	import type { Farmer } from "$lib/proxies/Farmer.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
@@ -24,8 +25,10 @@
 
 	let { player }: Props = $props();
 
-	// Map to a known value: the raw string comes from the save and ends up in a CSS url()
-	let gender = $derived(player.gender === Gender.Female ? "female" : "male");
+	// Map to a known value: the raw string comes from the save and ends up in a CSS
+	// url(). Like the game (IsMale is Gender == Male), anything but Male uses the
+	// female sprites
+	let gender = $derived(player.gender === Gender.Male ? "male" : "female");
 
 	// Spritesheets
 	let baseSheet = $derived(asset(`/img/${gender}_farmer.png`));
@@ -49,6 +52,13 @@
 				: "Basic Pullover (F)",
 		) as ClothingProxy,
 	);
+	// Item proxies hold an effect root, so dispose of these stand-ins when
+	// they're replaced or the preview goes away
+	onDestroy(() => underwear[Dispose]?.());
+	$effect(() => {
+		const shirt = undershirt;
+		return () => shirt[Dispose]?.();
+	});
 
 	let hat = $derived(player.hat);
 	let shirt = $derived(player.shirt ?? undershirt);
@@ -139,7 +149,7 @@
 	></div>
 {/snippet}
 
-<div class="appearance" class:female={player.gender === Gender.Female}>
+<div class="appearance" class:female={gender === "female"}>
 	<!-- START LAYERED TINT -->
 	{@render layer("base", baseSheet, { x: 16, y: 0 }, skinTones[2])}
 	{@render layer("base", baseSheet, { x: 32, y: 0 }, skinTones[1])}

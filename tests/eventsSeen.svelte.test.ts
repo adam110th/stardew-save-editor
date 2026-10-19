@@ -3,6 +3,7 @@ import { flushSync } from "svelte";
 import { describe, expect, it } from "vitest";
 import { setup as mockIDB } from "vitest-indexeddb";
 import type { EventIdList } from "../codegen/save";
+import { VanillaEvents, VanillaEventsById } from "../src/lib/Events";
 import { Raw } from "../src/lib/proxies";
 import { EventsSeen, toEventId } from "../src/lib/proxies/EventsSeen.svelte";
 import { SaveManager } from "../src/lib/SaveManager.svelte";
@@ -124,5 +125,28 @@ describe("events seen", () => {
 			"Mod.Id_1",
 		]);
 		cleanup();
+	});
+});
+
+// src/lib/wiki/events.json is edited by hand
+describe("vanilla event list", () => {
+	it("lists each event once, named, placed, and with an ID the save reads back", () => {
+		expect(VanillaEvents.length).toBeGreaterThanOrEqual(150);
+		expect(VanillaEventsById.size).toBe(VanillaEvents.length);
+		for (const event of VanillaEvents) {
+			expect(event.name, event.id).not.toBe("");
+			expect(event.location, event.id).not.toBe("");
+			expect(toEventId(event.id), event.id).toBe(event.id);
+		}
+	});
+
+	it("names the test save's events", () => {
+		for (const id of ["60367", "739330", "100162"])
+			expect(VanillaEventsById.has(id), id).toBe(true);
+		expect(VanillaEventsById.get("1")).toMatchObject({
+			name: "Abigail's 2 heart event",
+			location: "Pierre's General Store",
+			npcs: ["Abigail"],
+		});
 	});
 });

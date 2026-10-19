@@ -140,6 +140,18 @@ describe("Community Center bundles", () => {
 		);
 	});
 
+	it("names a gold bundle's checkbox after the gold it asks for", () => {
+		const vault = [...loaded().bundles.values()].find(
+			(b) => b.room === CCRoom.Vault,
+		);
+		if (!vault) throw new Error("No Vault bundle");
+		const { container } = render(BundleCard, { bundle: vault });
+		const gold = vault.requiredItems[0]?.quantity;
+		expect(gold).toBeGreaterThan(0);
+		const box = within(container).getByRole("checkbox", { hidden: true });
+		expect(box.getAttribute("aria-label")).toBe(`${gold} gold donated`);
+	});
+
 	it("only ticks a Joja project once every bundle in its room is done", async () => {
 		const { save, bundles } = loaded();
 		const { container } = render(JojaBundles, { save, bundles });

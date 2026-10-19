@@ -47,6 +47,7 @@ import {
 	shedXml,
 	withAnimalBuildings,
 } from "./helpers/animalBuildings";
+import { trackItems } from "./helpers/trackItems";
 import { withHouse, withToolAtClint } from "./helpers/upgrades";
 
 interface PageHarness {
@@ -348,6 +349,15 @@ describe("Save Manager Integration Tests", () => {
 			expectNamedSlots(page.getAllByTestId(/^item-\d+$/));
 		});
 
+		it("names empty equipment slots after what goes in them", () => {
+			const page = harness.render(editorPage);
+			const label = (slot: string) =>
+				page.getByTestId(`item-${slot}`).getAttribute("aria-label");
+			expect(label("shirtItem")).toBe("Shirt");
+			expect(label("leftRing")).toBe("Empty left ring slot");
+			expect(label("rightRing")).toBe("Empty right ring slot");
+		});
+
 		it("should create and edit items", async () => {
 			const page = harness.render(editorPage);
 			const slot = page.getByTestId("item-9");
@@ -419,6 +429,26 @@ describe("Save Manager Integration Tests", () => {
 			}
 		});
 
+		it("keeps the saved base price and edibility when the quality changes", async () => {
+			const page = harness.render(editorPage);
+			await fireEvent.click(page.getByTestId("item-4"));
+			await tick();
+			const raw = () => {
+				const item = saveManager.save?.player.inventory.get(4)?.[Raw];
+				if (!item) throw new Error("Expected an item in slot 4");
+				return item as { quality?: number; price?: number; edibility?: number };
+			};
+			const { price, edibility } = raw();
+			expect(price).toBeGreaterThan(0);
+			expect(edibility).toBeGreaterThan(0);
+
+			for (const quality of [4, 2, 0]) {
+				await fireEvent.click(page.getByTestId(`quality-${quality}`));
+				// The game applies quality to the base values when the item is sold or eaten
+				expect(raw()).toMatchObject({ quality, price, edibility });
+			}
+		});
+
 		it("prevents equipping items that don't match the slot", async () => {
 			const toastManager = new ToastManager();
 			const addSpy = vi.spyOn(toastManager, "add");
@@ -444,6 +474,25 @@ describe("Save Manager Integration Tests", () => {
 				"Leather Boots cannot be equipped in the Hat slot",
 			);
 			expect(saveManager.save?.player.inventory.get("hat")).toBeUndefined();
+		});
+
+		it("shows a big craftable from the save as itself", () => {
+			// TestSave has a Cheese Press in slot 5, saved by the game as an Object
+			// with <bigCraftable>. Its ID (16) is also Wild Horseradish's
+			const item = saveManager.save?.player.inventory.get(5);
+			expect(item?.[Raw].bigCraftable).toBe(true);
+			expect(item?.info?._type).toBe("BigCraftable");
+			expect(item?.info?.name).toBe("Cheese Press");
+
+			const page = harness.render(editorPage);
+			const slot = page.getByTestId("item-5");
+			expect(slot.getAttribute("data-item-type")).toBe("BigCraftable");
+			// Drawn from the Cheese Press cell of the big craftables sheet
+			const sprite = slot.querySelector("svg");
+			expect(sprite?.querySelector("image")?.getAttribute("href")).toMatch(
+				/\/Craftables\.png$/,
+			);
+			expect(sprite?.getAttribute("viewBox")).toBe("0 64 16 32");
 		});
 
 		// it("should support drag and drop operations", async () => {
@@ -480,7 +529,13 @@ describe("Save Manager Integration Tests", () => {
 			].map((layer) => layer.getAttribute("style") ?? "");
 			expect(styles.length).toBeGreaterThan(0);
 			expect(styles.join("\n")).not.toContain("attacker.example");
-			expect(styles.join("\n")).toContain("/img/male_farmer.png");
+			// Like the game, anything but Male draws the female farmer
+			expect(styles.join("\n")).toContain("/img/female_farmer.png");
+			expect(
+				page.container
+					.querySelector(".appearance")
+					?.classList.contains("female"),
+			).toBe(true);
 		});
 
 		it("should modify character appearance", () => {
@@ -1065,6 +1120,34 @@ describe("Save Manager Integration Tests", () => {
 			expect(document.activeElement).toBe(input);
 		});
 
+		it("re-sorts when a villager is replaced, not only when the count changes", async () => {
+			const save = saveManager.save;
+			if (!save) throw new Error("No save loaded");
+			const page = harness.render(relationshipsPage);
+			const rows = () => page.getAllByTestId("friendship-row");
+			const names = () =>
+				rows().map(
+					(row) => within(row).getByTestId("friendship-name").textContent,
+				);
+			const before = names();
+			const top = save.player.friendships.get(before[0] ?? "");
+			const last = before.at(-1);
+			if (!top || !last) throw new Error("Expected villagers");
+
+			// Same villagers, but the last one now has the most points
+			const replacement = Friendship.fromName(last);
+			replacement.points = top.points + 1;
+			save.player.friendships.set(last, replacement);
+			flushSync();
+
+			expect(names()).toHaveLength(before.length);
+			expect(names()[0]).toBe(last);
+			const points = within(rows()[0] as HTMLElement).getByTestId(
+				"friendship-points",
+			) as HTMLInputElement;
+			expect(points.value).toBe(String(top.points + 1));
+		});
+
 		it("keeps a villager's name from the save inside its portrait's url()", async () => {
 			const save = saveManager.save;
 			if (!save) throw new Error("No save loaded");
@@ -1131,6 +1214,10 @@ describe("Save Manager Integration Tests", () => {
 			};
 			const labels = (icons: HTMLElement[]) =>
 				icons.map((icon) => icon.getAttribute("aria-label"));
+			const tooltip = (icon: HTMLElement) =>
+				icon.parentElement
+					?.querySelector('[role="tooltip"]')
+					?.textContent?.trim();
 
 			const lewis = rowFor("Lewis");
 			const gifts = within(lewis).getAllByTestId("friendship-loved-gift");
@@ -1154,9 +1241,9 @@ describe("Save Manager Integration Tests", () => {
 			]);
 			for (const gift of [...gifts, ...universal]) {
 				expect(gift.getAttribute("role")).toBe("img");
-				expect(gift.getAttribute("title")).toBe(
-					gift.getAttribute("aria-label"),
-				);
+				// Hovering shows the item's name, with no native title on top
+				expect(tooltip(gift)).toBe(gift.getAttribute("aria-label"));
+				expect(gift.closest("[title]")).toBeNull();
 				// A drawn sprite, not the "??" placeholder
 				expect(gift.querySelector("svg image")).toBeTruthy();
 			}
@@ -1172,7 +1259,11 @@ describe("Save Manager Integration Tests", () => {
 			expect(
 				own.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING,
 			).toBeTruthy();
-			expect(within(lewis).getByText("Universal loves")).toBeTruthy();
+			// Each list follows its label
+			expect(within(lewis).getByText("Loves:").nextElementSibling).toBe(own);
+			expect(
+				within(lewis).getByText("Universal loves:").nextElementSibling,
+			).toBe(shared);
 
 			// Haley hates Prismatic Shard, so it isn't one of her universal loves;
 			// Stardrop Tea is, as nobody can override it
@@ -1234,6 +1325,8 @@ describe("Save Manager Integration Tests", () => {
 			await fireEvent.input(gifts, { target: { value: "2" } });
 			flushSync();
 			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(2);
+
+			// Reset, so they can be given gifts again this week
 			await fireEvent.input(gifts, { target: { value: "0" } });
 			flushSync();
 			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(0);
@@ -1481,6 +1574,10 @@ describe("Save Manager Integration Tests", () => {
 			const page = harness.render(editorPage, {
 				context: setToastManagerContext(toastManager),
 			});
+			// Headed like the chests page, with the sort button beside the title
+			expect(page.getByRole("heading", { level: 3 }).textContent).toBe(
+				"Inventory",
+			);
 			await fireEvent.click(page.getByTestId("sort-inventory"));
 			const used = [...Array(inventory.slotCount).keys()].filter(
 				(i) => inventory.get(i) !== undefined,
@@ -1525,6 +1622,16 @@ describe("Save Manager Integration Tests", () => {
 			const toastManager = new ToastManager();
 			const context = setToastManagerContext(toastManager);
 			return harness.render(chestsPage, { context });
+		};
+
+		const chestIn = (location: string) => {
+			const chests = saveManager.save?.chests ?? [];
+			const index = chests.findIndex(
+				(chest) => chest.metadata.location === location,
+			);
+			const chest = chests[index];
+			if (!chest) throw new Error(`No chest in ${location}`);
+			return { chest, index };
 		};
 
 		it("names each chest slot after its item", () => {
@@ -1665,6 +1772,71 @@ describe("Save Manager Integration Tests", () => {
 			await fireEvent.click(page.getByTestId("sort-all-chests"));
 			expect(fridge?.inventory.get(0)).toBe(parsnip);
 		});
+
+		it("dims the items that don't match a search", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			chest.inventory.set(0, ItemFactory.fromName("Parsnip"));
+			chest.inventory.set(1, ItemFactory.fromName("Stone"));
+			flushSync();
+
+			const search = page.getByTestId("chest-search");
+			await fireEvent.input(search, { target: { value: "parsnip" } });
+			const dimmed = (slot: number) =>
+				page.getByTestId(`chest-0-drag-${slot}`).classList.contains("dimmed");
+			expect(dimmed(0)).toBe(false);
+			expect(dimmed(1)).toBe(true);
+
+			await fireEvent.click(page.getByTestId("chest-search-clear"));
+			expect(dimmed(1)).toBe(false);
+		});
+
+		it("shows each search result's amount as edited", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			const parsnip = ItemFactory.fromName("Parsnip");
+			chest.inventory.set(0, parsnip);
+			flushSync();
+			// What the item editor's Amount field changes
+			parsnip.amount = 7;
+			flushSync();
+
+			await fireEvent.input(page.getByTestId("chest-search"), {
+				target: { value: "parsnip" },
+			});
+			expect(page.getByTestId("chest-search-result-0-0").textContent).toContain(
+				"Parsnip ×7",
+			);
+		});
+
+		it("jumps to a search result in another group", async () => {
+			const page = renderChests();
+			const { chest, index } = chestIn("IslandFarmHouse");
+			chest.inventory.set(3, ItemFactory.fromName("Ancient Fruit"));
+			flushSync();
+
+			await fireEvent.input(page.getByTestId("chest-search"), {
+				target: { value: "ancient fruit" },
+			});
+			const result = page.getByTestId(`chest-search-result-${index}-3`);
+			expect(result.textContent).toContain("IslandFarmHouse - Fridge");
+			await fireEvent.click(result);
+			await tick();
+
+			// The island fridges are listed, with the item selected
+			expect((page.getByTestId("chest-group") as HTMLSelectElement).value).toBe(
+				"island-fridges",
+			);
+			expect(page.getAllByTestId("chest-section")).toHaveLength(1);
+			expect(
+				page.getByTestId(`chest-${index}-item-3`).classList.contains("active"),
+			).toBe(true);
+			expect(page.getByText("Editing: IslandFarmHouse - Fridge")).toBeTruthy();
+			// The results close once one is picked
+			expect(page.queryByTestId(`chest-search-result-${index}-3`)).toBeNull();
+		});
 	});
 
 	describe("Relationships search", () => {
@@ -1772,12 +1944,52 @@ describe("Save Manager Integration Tests", () => {
 				);
 			if (!penny) throw new Error("No row for Penny");
 			const books = within(penny).getByRole("img", { name: "Any book" });
-			expect(books.getAttribute("title")).toMatch(
-				/^Any book: .*Monster Compendium/,
-			);
+			expect(
+				books.parentElement
+					?.querySelector('[role="tooltip"]')
+					?.textContent?.trim(),
+			).toBe("Any book");
+			expect(
+				within(penny)
+					.getByText("Any book", { selector: "small" })
+					.getAttribute("title"),
+			).toMatch(/Monster Compendium/);
 
 			await fireEvent.input(search, { target: { value: "" } });
 			expect(names()).toHaveLength(characters.length);
+		});
+
+		it("disposes the gift items of villagers the search hides", async () => {
+			const created = trackItems();
+			try {
+				const page = harness.render(relationshipsPage);
+				const icons = () =>
+					page.queryAllByTestId(/^friendship-(loved-gift|universal-love)$/);
+				// One item per icon on screen, none disposed twice
+				const live = () => created.filter((item) => item.disposed === 0);
+				const expectOneItemPerIcon = () => {
+					expect(live()).toHaveLength(icons().length);
+					expect(created.every((item) => item.disposed <= 1)).toBe(true);
+				};
+				expectOneItemPerIcon();
+				const all = icons().length;
+				expect(all).toBeGreaterThan(20);
+
+				const search = page.getByTestId("relationships-search");
+				await fireEvent.input(search, { target: { value: "lewis" } });
+				expectOneItemPerIcon();
+				expect(icons()).toHaveLength(11);
+
+				await fireEvent.input(search, { target: { value: "" } });
+				expectOneItemPerIcon();
+				expect(icons()).toHaveLength(all);
+
+				page.unmount();
+				expect(created.length).toBeGreaterThan(all);
+				expect(created.every((item) => item.disposed === 1)).toBe(true);
+			} finally {
+				vi.restoreAllMocks();
+			}
 		});
 	});
 

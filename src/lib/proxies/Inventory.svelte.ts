@@ -114,16 +114,14 @@ export class Inventory
 	/**
 	 * Swap two backpack slots. Both items stay in the inventory, so unlike two set()
 	 * calls this doesn't dispose either one (which would stop its edits being saved).
+	 * It swaps the save's own entries, so anything in a slot moves with it, even
+	 * one the inventory has no item for.
 	 */
 	public swap(a: number, b: number) {
-		const raw = this[Raw].items.Item;
+		const items = this[Raw].items.Item;
+		[items[a], items[b]] = [items[b], items[a]];
 		const first = this.get(a);
-		const second = this.get(b);
-		// @ts-expect-error converting undefined to nil marker
-		raw[a] = second ? second[Raw] : nil;
-		// @ts-expect-error converting undefined to nil marker
-		raw[b] = first ? first[Raw] : nil;
-		super.set(a, second);
+		super.set(a, this.get(b));
 		super.set(b, first);
 	}
 
@@ -132,6 +130,18 @@ export class Inventory
 		// Preserve reactive anchor by using set(undefined) instead of super.delete
 		this.set(index, undefined);
 		return existed;
+	}
+
+	/**
+	 * Whether a backpack slot holds nothing. Unlike `get`, this also checks the
+	 * save's own slot, so anything there (a Secret Note included) still takes it
+	 * up even if the inventory has no item for it.
+	 */
+	public isEmpty(index: number) {
+		// Read through the map too, so effects update when the slot changes
+		if (this.get(index)) return false;
+		const entry = this[Raw].items.Item[index];
+		return !entry || isNilSentinel(entry);
 	}
 
 	public adjustSlots(size: number) {

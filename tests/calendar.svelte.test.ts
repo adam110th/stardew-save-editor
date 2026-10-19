@@ -8,8 +8,7 @@ import { Season } from "$types/save";
 import { SaveManager } from "../src/lib/SaveManager.svelte";
 import { XMLManager } from "../src/lib/workers/xml";
 
-// biome-ignore lint/suspicious/noExplicitAny: poking at raw parsed save data
-type Parsed = any;
+const parse = (xml: string) => new XMLManager().parse<SaveFile>(xml);
 
 async function importSave(xml: string): Promise<SaveManager> {
 	let saveManager!: SaveManager;
@@ -37,10 +36,13 @@ describe("Calendar", () => {
 		return saveManager.save;
 	};
 	const game = () => save().raw.SaveGame;
-	const weatherIn = (context: string, parsed: Parsed = save().raw) =>
-		parsed.SaveGame.locationWeather.item.find(
-			(entry: Parsed) => entry.key.string === context,
-		).value.LocationWeather;
+	const weatherIn = (context: string, parsed: SaveFile = save().raw) => {
+		const weather = parsed.SaveGame.locationWeather.item.find(
+			(entry) => entry.key.string === context,
+		)?.value.LocationWeather;
+		if (!weather) throw new Error(`No ${context} weather`);
+		return weather;
+	};
 	const daysPlayed = () =>
 		getStatValue(save().raw.SaveGame.player, "daysPlayed");
 	// For tests that write out and read back the whole save
@@ -128,10 +130,20 @@ describe("Calendar", () => {
 		const valley = weatherIn("Default");
 		expect(valley.weather.string).toBe("Sun");
 		expect(valley.Weather).toBe("Sun");
-		for (const flag of ["Raining", "Snowing", "Lightning", "DebrisWeather"]) {
-			expect(valley[`is${flag}`].boolean).toBe(false);
-			expect(valley[`Is${flag}`]).toBe(false);
-		}
+		for (const flag of [
+			"isRaining",
+			"isSnowing",
+			"isLightning",
+			"isDebrisWeather",
+		] as const)
+			expect(valley[flag].boolean).toBe(false);
+		for (const flag of [
+			"IsRaining",
+			"IsSnowing",
+			"IsLightning",
+			"IsDebrisWeather",
+		] as const)
+			expect(valley[flag]).toBe(false);
 
 		calendar.today = "Storm";
 		expect(game().isRaining).toBe(true);
@@ -366,7 +378,7 @@ describe("Calendar", () => {
 
 		const { blob, validation } = await saveManager.validatedExport();
 		expect(validation).toEqual({ valid: true, errors: [], warnings: [] });
-		const parsed: Parsed = await new XMLManager().parse(await blob.text());
+		const parsed = parse(await blob.text());
 		expect(parsed.SaveGame.year).toBe(1);
 		expect(getStatValue(parsed.SaveGame.player, "daysPlayed")).toBe(10);
 	});
@@ -418,9 +430,10 @@ describe("Calendar", () => {
 		calendar.season = Season.Fall;
 		calendar.day = 9;
 
-		const xmlOut = await (await saveManager.export()).text();
-		const parsed: Parsed = await new XMLManager().parse(xmlOut);
-		const [hand] = parsed.SaveGame.farmhands.Farmer;
+		const parsed = parse(await (await saveManager.export()).text());
+		const { farmhands } = parsed.SaveGame;
+		const [hand] = farmhands === "" ? [] : farmhands.Farmer;
+		if (!hand) throw new Error("No farmhand");
 		expect(hand.name).toBe("Hand");
 		expect(hand).toMatchObject({
 			dayOfMonthForSaveGame: 9,
@@ -441,7 +454,7 @@ describe("Calendar", () => {
 		calendar.tomorrow = "Storm";
 
 		const xml = await (await saveManager.export()).text();
-		const parsed: Parsed = await new XMLManager().parse(xml);
+		const parsed = parse(xml);
 		expect(parsed.SaveGame).toMatchObject({
 			year: 3,
 			currentSeason: "fall",
@@ -478,31 +491,31 @@ describe("Calendar", () => {
 				if (building["@_xsi:type"] === "PetBowl") building.watered = false;
 
 			const exported = async () => {
-				const xml = await (await saveManager.export()).text();
-				const parsed: Parsed = await new XMLManager().parse(xml);
+				const parsed = parse(await (await saveManager.export()).text());
 				const farm = parsed.SaveGame.locations.GameLocation.find(
-					(l: Parsed) => l.name === "Farm",
+					(l) => l.name === "Farm",
 				);
+				if (!farm) throw new Error("No farm in the export");
 				return {
-					soil: farm.terrainFeatures.item
-						.map((entry: Parsed) => entry.value.TerrainFeature)
-						.filter((f: Parsed) => f["@_xsi:type"] === "HoeDirt")
-						.map((f: Parsed) => f.state),
-					bowl: farm.buildings.Building.find(
-						(b: Parsed) => b["@_xsi:type"] === "PetBowl",
-					).watered,
+					soil: (farm.terrainFeatures?.item ?? [])
+						.map((entry) => entry.value.TerrainFeature)
+						.filter((f) => f["@_xsi:type"] === "HoeDirt")
+						.map((f) => f.state),
+					bowl: farm.buildings?.Building?.find(
+						(b) => b["@_xsi:type"] === "PetBowl",
+					)?.watered,
 				};
 			};
 
 			calendar.today = "Rain";
 			const rained = await exported();
 			expect(rained.soil.length).toBeGreaterThan(0);
-			expect(rained.soil.every((state: number) => state === 1)).toBe(true);
+			expect(rained.soil.every((state) => state === 1)).toBe(true);
 			expect(rained.bowl).toBe(true);
 
 			calendar.today = "Sun";
 			const dried = await exported();
-			expect(dried.soil.every((state: number) => state === 0)).toBe(true);
+			expect(dried.soil.every((state) => state === 0)).toBe(true);
 			expect(dried.bowl).toBe(false);
 		},
 	);
