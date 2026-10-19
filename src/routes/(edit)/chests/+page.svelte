@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from "svelte";
 	import {
 		type ChestGroupId,
 		ChestGroups,
@@ -12,7 +13,11 @@
 		sameSlot,
 		sortChest,
 	} from "$lib/chestMoves";
-	import { type ChestProxy, SwappableChests } from "$lib/proxies/Chest.svelte";
+	import {
+		type ChestProxy,
+		SwappableChests,
+		searchChests,
+	} from "$lib/proxies/Chest.svelte";
 	import { Item } from "$lib/proxies/Item.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
 	import {
@@ -23,6 +28,7 @@
 	import { getToastManager, Toast } from "$lib/ToastManager.svelte";
 	import SortButton from "$lib/ui/SortButton.svelte";
 	import UiContainer from "$lib/ui/UIContainer.svelte";
+	import UiInput from "$lib/ui/UIInput.svelte";
 	import UiSelect from "$lib/ui/UISelect.svelte";
 	import ItemSlot from "../inventory/ItemSlot.svelte";
 	import ItemSprite from "../inventory/ItemSprite.svelte";
@@ -52,6 +58,13 @@
 	let selectedItem = $derived(selectedChest?.inventory.get(selectedIndex));
 
 	let chestList = $state<HTMLElement>();
+
+	let search = $state("");
+	let searchResults = $derived(searchChests(save.chests, search));
+	let showResults = $state(true);
+	let searchBox: HTMLDivElement | undefined = $state();
+	let searching = $derived(showResults && search.trim() !== "");
+	let matches = $derived(new Set(searchResults.map((result) => result.item)));
 
 	/** Items picked with Ctrl/Cmd+click, to drag several at once */
 	let picked = $state<SlotRef[]>([]);
@@ -84,6 +97,26 @@
 		}
 		selectedChest = chest;
 		selectedIndex = index;
+	};
+
+	/** Show a search result: switch to its group, select it and scroll to its chest */
+	const selectResult = async (chestIndex: number, slotIndex: number) => {
+		const chest = save.chests[chestIndex];
+		if (!chest) return;
+		selectedGroupId = chestGroup(chest);
+		selectedChest = chest;
+		selectedIndex = slotIndex;
+		picked = [];
+		showResults = false;
+		await tick();
+		chestList
+			?.querySelector(`[data-chest-index="${chestIndex}"]`)
+			?.scrollIntoView({ block: "nearest" });
+	};
+
+	const clearSearch = () => {
+		search = "";
+		searchBox?.querySelector("input")?.focus();
 	};
 
 	// Drag and drop: one item onto a slot (moving or swapping), or onto a chest
@@ -167,21 +200,26 @@
 			item: chest.inventory.get(index),
 		}));
 
-	/** Section headings; chests with the same label get a number to tell them apart */
+	/**
+	    Chest names, for every group (search results can be in any of them);
+	    chests in a group with the same label get a number to tell them apart
+	*/
 	const headings = $derived.by(() => {
 		const result = new Map<ChestProxy, string>();
-		const seen = new Map<string, number>();
-		const counts = new Map<string, number>();
-		for (const chest of selectedGroup?.chests ?? [])
-			counts.set(chest.label, (counts.get(chest.label) ?? 0) + 1);
-		for (const chest of selectedGroup?.chests ?? []) {
-			const label = chest.label;
-			const n = (seen.get(label) ?? 0) + 1;
-			seen.set(label, n);
-			result.set(
-				chest,
-				(counts.get(label) ?? 0) > 1 ? `${label} #${n}` : label,
-			);
+		for (const group of groups) {
+			const seen = new Map<string, number>();
+			const counts = new Map<string, number>();
+			for (const chest of group.chests)
+				counts.set(chest.label, (counts.get(chest.label) ?? 0) + 1);
+			for (const chest of group.chests) {
+				const label = chest.label;
+				const n = (seen.get(label) ?? 0) + 1;
+				seen.set(label, n);
+				result.set(
+					chest,
+					(counts.get(label) ?? 0) > 1 ? `${label} #${n}` : label,
+				);
+			}
 		}
 		return result;
 	});
@@ -261,6 +299,63 @@
 				data-testid="sort-all-chests"
 			/>
 		</div>
+		<div class="search" bind:this={searchBox}>
+			<UiInput
+				type="text"
+				placeholder="Search all chests..."
+				data-testid="chest-search"
+				bind:value={search}
+				onfocus={() => (showResults = true)}
+				oninput={() => (showResults = true)}
+				onkeydown={(event) => {
+					if (event.key === "Escape" && search) {
+						event.preventDefault();
+						clearSearch();
+					}
+				}}
+			/>
+			{#if search}
+				<button
+					class="clear"
+					type="button"
+					aria-label="Clear search"
+					title="Clear search"
+					data-testid="chest-search-clear"
+					onclick={clearSearch}
+				>
+					&times;
+				</button>
+			{/if}
+		</div>
+		{#if searching}
+			{#if searchResults.length === 0}
+				<small>No items found.</small>
+			{:else}
+				<small>
+					{searchResults.length}
+					{searchResults.length === 1 ? "match" : "matches"}
+				</small>
+				<div class="results">
+					{#each searchResults as { chestIndex, slotIndex, chest, item }}
+						<button
+							class="result"
+							class:active={chest === selectedChest &&
+								slotIndex === selectedIndex}
+							data-testid={`chest-search-result-${chestIndex}-${slotIndex}`}
+							onclick={() => selectResult(chestIndex, slotIndex)}
+						>
+							<div class="result-sprite">
+								<ItemSprite {item} />
+							</div>
+							<span class="result-name"
+								>{item.name} &times;{item.amount ?? item.stack}</span
+							>
+							<span class="result-chest">{chestName(chest)}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		{/if}
 		<label class="picker">
 			<span hidden>Container group</span>
 			<UiSelect
@@ -306,6 +401,7 @@
 						class:colored={color}
 						style:--chest-color={color?.css}
 						data-testid="chest-section"
+						data-chest-index={chestIndex}
 						aria-label={headings.get(chest)}
 						ondragover={allowDrop}
 						ondrop={(e) => dropOnChest(chest, e)}
@@ -371,6 +467,7 @@
 								>
 									<div
 										class="item"
+										class:dimmed={searching && item && !matches.has(item)}
 										draggable={item !== undefined}
 										ondragstart={(e) => dragStart(chest, index, e)}
 										ondragend={() => (dragging = undefined)}
@@ -425,6 +522,81 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+	}
+
+	.search {
+		position: relative;
+		margin-bottom: 4px;
+	}
+
+	.search :global(input) {
+		width: 100%;
+		box-sizing: border-box;
+		padding-right: 28px;
+		font-size: large;
+	}
+
+	.clear {
+		all: unset;
+		position: absolute;
+		top: 50%;
+		right: 6px;
+		transform: translateY(-50%);
+		width: 20px;
+		height: 20px;
+		line-height: 20px;
+		text-align: center;
+		font-size: 22px;
+		font-weight: bold;
+		color: #6f3b31;
+		border-radius: 4px;
+		cursor: pointer;
+	}
+
+	.clear:hover,
+	.clear:focus-visible {
+		background-color: rgba(0, 0, 0, 0.12);
+	}
+
+	.results {
+		display: flex;
+		flex-direction: column;
+		max-height: 12rem;
+		overflow-y: auto;
+		margin-top: 4px;
+		margin-bottom: 8px;
+	}
+
+	.result {
+		all: unset;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 2px 4px;
+		border-bottom: #5b2b2a 1px solid;
+		cursor: pointer;
+	}
+
+	.result:hover,
+	.result:focus-visible,
+	.result.active {
+		background-color: rgba(255, 255, 255, 0.4);
+	}
+
+	.result-sprite {
+		position: relative;
+		width: 32px;
+		height: 32px;
+		flex-shrink: 0;
+	}
+
+	.result-name {
+		flex: 1;
+	}
+
+	.result-chest {
+		font-size: small;
+		opacity: 0.8;
 	}
 
 	.picked {
@@ -496,6 +668,14 @@
 		color: #b56cff;
 	}
 
+	/*
+	    A little wider than the other pages, so a chest's 12 slots fit across
+	    with room to spare beside a scrollbar
+	*/
+	:global(.content):has(.workspace) {
+		width: 540px;
+	}
+
 	.workspace {
 		position: relative;
 		display: flex;
@@ -508,12 +688,14 @@
 	    regular (36-slot) chests, and taller when the screen has room.
 	*/
 	.chest-list {
-		--three-chests: calc(3 * 176px + 2 * 10px);
+		--three-chests: calc(3 * 166px + 2 * 10px);
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		max-height: max(var(--three-chests), calc(100dvh - 590px));
+		max-height: max(var(--three-chests), calc(100dvh - 621px));
 		overflow-y: auto;
+		/* The same width whether or not a scrollbar is showing */
+		scrollbar-gutter: stable;
 		padding-right: 4px;
 	}
 
@@ -530,21 +712,14 @@
 		}
 
 		.chest-list {
-			max-height: max(var(--three-chests), calc(100dvh - 395px));
+			max-height: max(var(--three-chests), calc(100dvh - 426px));
 		}
 	}
 
 	.chest {
-		padding: 6px 8px 8px;
+		--chest-border: #b14e0544;
 		border-radius: 6px;
-		border: 2px solid #b14e0544;
-		background: #fff3dc66;
-	}
-
-	/* Tinted with the colour picked for the chest in-game */
-	.chest.colored {
-		border-color: var(--chest-color);
-		background: color-mix(in srgb, var(--chest-color) 45%, #ffe7c2);
+		border: 2px solid var(--chest-border);
 	}
 
 	.chest header {
@@ -552,7 +727,19 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px 8px;
-		margin-bottom: 4px;
+		padding: 4px 8px;
+		border-radius: 4px 4px 0 0;
+		border-bottom: 2px solid var(--chest-border);
+		background: #fff3dc66;
+	}
+
+	/* The colour picked for the chest in-game frames it and tints its heading */
+	.chest.colored {
+		--chest-border: var(--chest-color);
+	}
+
+	.chest.colored header {
+		background: color-mix(in srgb, var(--chest-color) 45%, #ffe7c2);
 	}
 
 	.used {
@@ -585,21 +772,33 @@
 		opacity: 0.8;
 	}
 
+	/* Slots side by side on the plain background, like the backpack */
 	.item-grid {
 		display: grid;
 		grid-template-columns: repeat(12, min-content);
-		/* 36px slots, with a little space between rows */
-		grid-auto-rows: 40px;
+		grid-auto-rows: 36px;
+		justify-content: center;
+		padding: 6px;
 	}
 
 	.item {
 		position: relative;
-		transition: transform 0.1s;
+		transition:
+			transform 0.1s,
+			opacity 3s linear;
 		cursor: pointer;
 	}
 
 	.item:hover {
 		transform: scale(1.2);
 		transform-origin: center;
+	}
+
+	/* Fade out quickly while searching; fade back in slowly once results close */
+	.item.dimmed {
+		opacity: 0.3;
+		transition:
+			transform 0.1s,
+			opacity 0.15s;
 	}
 </style>
