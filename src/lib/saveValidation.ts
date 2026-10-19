@@ -12,11 +12,16 @@ export interface SaveValidation {
 }
 
 export const SUPPORTED_VERSIONS = ["1.6"];
-// Money is an `int` in the game, so it can't read anything outside this range
+// The game stores money and item quality as `int`s, so it can't read anything
+// outside this range
 const INT32_MIN = -2_147_483_648;
 const INT32_MAX = 2_147_483_647;
 const UINT32_MAX = 4_294_967_295;
-const VALID_QUALITIES = new Set([0, 1, 2, 4]);
+// Normal, silver, gold and iridium (there is no quality 3). The game still
+// loads other values, it just shows them oddly
+const STAR_QUALITIES = new Set([0, 1, 2, 4]);
+// This Rarecrow, (BC)126, keeps the hat it's wearing in `quality` (hat ID + 1)
+const HAT_RARECROW_ID = "126";
 /** The Missing Bundle; a true reward entry for it crashes the game */
 const MISSING_BUNDLE = 36;
 const SEASONS = new Set(["spring", "summer", "fall", "winter"]);
@@ -42,8 +47,19 @@ const toInteger = (value: unknown) => {
 	return undefined;
 };
 
+/** A whole number that fits in the game's `int` */
+const toInt32 = (value: unknown) => {
+	const number = toInteger(value);
+	return number !== undefined && number >= INT32_MIN && number <= INT32_MAX
+		? number
+		: undefined;
+};
+
 const isWholeNumber = (value: unknown) => toInteger(value) !== undefined;
 const isTrue = (value: unknown) => value === true || value === "true";
+
+const itemsHave = (count: number) =>
+	`${count} item${count === 1 ? " has" : "s have"}`;
 
 /** Walk every object in the save, calling `visit` on each one that looks like an item */
 function forEachItem(node: unknown, visit: (item: Json) => void) {
@@ -51,7 +67,8 @@ function forEachItem(node: unknown, visit: (item: Json) => void) {
 	while (stack.length) {
 		const current = stack.pop();
 		if (Array.isArray(current)) {
-			stack.push(...current);
+			// One at a time: spreading a long list can overflow the call stack
+			for (const value of current) stack.push(value);
 		} else if (isObject(current)) {
 			if ("itemId" in current && "stack" in current) visit(current);
 			for (const value of Object.values(current))
@@ -114,8 +131,8 @@ export function validateSave(parsed: unknown): SaveValidation {
 				String(farmer.name ?? "").trim() ||
 				(i === 0 ? "The main player" : `Farmhand ${i}`);
 			if ("money" in farmer) {
-				const money = toInteger(farmer.money);
-				if (money === undefined || money < INT32_MIN || money > INT32_MAX)
+				const money = toInt32(farmer.money);
+				if (money === undefined)
 					errors.push(`${label}'s money (${farmer.money}) is out of range`);
 				else if (money < 0)
 					warnings.push(`${label}'s money (${money}) is negative`);
@@ -212,24 +229,28 @@ export function validateSave(parsed: unknown): SaveValidation {
 	}
 
 	// Items, wherever they are (inventories, chests, machines...)
-	let badQuality = 0;
+	let unreadableQuality = 0;
+	let unusualQuality = 0;
 	let badStack = 0;
 	forEachItem(game, (item) => {
-		if (
-			item.quality !== undefined &&
-			!VALID_QUALITIES.has(Number(item.quality))
-		)
-			badQuality++;
-		if (Number(item.stack) < 1) badStack++;
+		if (item.quality !== undefined) {
+			const quality = toInt32(item.quality);
+			const isHatRarecrow =
+				isTrue(item.bigCraftable) && String(item.itemId) === HAT_RARECROW_ID;
+			if (quality === undefined) unreadableQuality++;
+			else if (!STAR_QUALITIES.has(quality) && !isHatRarecrow) unusualQuality++;
+		}
+		if ((toInteger(item.stack) ?? 0) < 1) badStack++;
 	});
-	if (badQuality)
+	if (unreadableQuality)
 		errors.push(
-			`${badQuality} item${badQuality === 1 ? " has" : "s have"} an invalid quality (must be normal, silver, gold or iridium)`,
+			`${itemsHave(unreadableQuality)} a quality the game can't read`,
 		);
-	if (badStack)
+	if (unusualQuality)
 		warnings.push(
-			`${badStack} item${badStack === 1 ? " has" : "s have"} a stack of less than 1`,
+			`${itemsHave(unusualQuality)} an unusual quality (not normal, silver, gold or iridium)`,
 		);
+	if (badStack) warnings.push(`${itemsHave(badStack)} a stack of less than 1`);
 
 	return result();
 }

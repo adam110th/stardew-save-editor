@@ -35,6 +35,9 @@ const daysPlayedStat = (player: SaveFile["SaveGame"]["player"]) => {
 	return stat;
 };
 
+const UNUSUAL_QUALITY =
+	"1 item has an unusual quality (not normal, silver, gold or iridium)";
+
 describe("validateSave", () => {
 	let fixture: SaveFile;
 	// Parsing is slow, so parse once and hand each test its own copy
@@ -126,11 +129,18 @@ describe("validateSave", () => {
 			"Missing Bundle",
 		],
 		[
-			"an invalid item quality",
+			"an item quality the game can't read",
 			(p: SaveFile) => {
-				firstItemWithQuality(p).quality = 3;
+				firstItemWithQuality(p).quality = "high" as unknown as number;
 			},
-			"1 item has an invalid quality",
+			"1 item has a quality the game can't read",
+		],
+		[
+			"an item quality too big for the game's int",
+			(p: SaveFile) => {
+				firstItemWithQuality(p).quality = 2 ** 31;
+			},
+			"1 item has a quality the game can't read",
 		],
 		[
 			"a season the game can't read",
@@ -231,12 +241,58 @@ describe("validateSave", () => {
 			},
 			"Test's money (-5) is negative",
 		],
+		[
+			"an unusual item quality",
+			(p: SaveFile) => {
+				firstItemWithQuality(p).quality = 3;
+			},
+			UNUSUAL_QUALITY,
+		],
+		[
+			"an unusual quality on an ordinary item with ID 126 (Strange Doll)",
+			(p: SaveFile) => {
+				Object.assign(firstItemWithQuality(p), { itemId: 126, quality: 5 });
+			},
+			UNUSUAL_QUALITY,
+		],
+		[
+			"an empty stack",
+			(p: SaveFile) => {
+				firstItemWithQuality(p).stack = 0;
+			},
+			"1 item has a stack of less than 1",
+		],
+		[
+			"a stack that isn't a number",
+			(p: SaveFile) => {
+				firstItemWithQuality(p).stack = "" as unknown as number;
+			},
+			"1 item has a stack of less than 1",
+		],
 	])("only warns about %s", (_, breakIt, message) => {
 		const parsed = loadParsed();
 		breakIt(parsed);
 		const result = validateSave(parsed);
 		expect(result.valid).toBe(true);
 		expect(result.warnings.join("\n")).toContain(message);
+	});
+
+	it("accepts a Rarecrow wearing a hat, which keeps the hat in its quality", () => {
+		const parsed = loadParsed();
+		const placed = locationNamed(parsed, "Farm").objects?.item[0]?.value.Object;
+		if (!placed) throw new Error("Nothing placed on the Farm");
+		// (BC)126 wearing hat 4
+		Object.assign(placed, {
+			name: "Rarecrow",
+			itemId: 126,
+			bigCraftable: true,
+			quality: 5,
+		});
+		expect(validateSave(parsed)).toEqual({
+			valid: true,
+			errors: [],
+			warnings: [],
+		});
 	});
 
 	it("only warns about snow outside winter", () => {
