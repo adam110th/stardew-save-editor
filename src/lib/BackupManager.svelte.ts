@@ -1,4 +1,4 @@
-import { openDB } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 import {
 	getToastManager,
 	Toast,
@@ -72,9 +72,10 @@ export class BackupManager {
 	 * If any invalid data/errors are encountered, the database is cleared.
 	 */
 	private async load() {
-		let db: Awaited<ReturnType<typeof openDB>> | undefined;
+		let db: IDBPDatabase | undefined;
 		try {
-			// Get the backup files from local storage
+			// Get the backup files from local storage (opening it can fail too,
+			// e.g. in a private window)
 			db = await openDB("backups", 1, {
 				upgrade: (db) => db.createObjectStore("files", { autoIncrement: true }),
 			});

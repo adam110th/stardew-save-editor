@@ -11,20 +11,34 @@ import {
 } from "../src/lib/ToastManager.svelte";
 import uploadPage from "../src/routes/(home)/(upload)/+page.svelte";
 
+const renderUploadPage = () => {
+	let saveManager!: SaveManager;
+	const cleanup = $effect.root(() => {
+		saveManager = new SaveManager();
+	});
+	const toastManager = new ToastManager();
+	const context = new Map<unknown, unknown>([
+		...setSaveManagerContext(saveManager),
+		...setToastManagerContext(toastManager),
+	]);
+	const page = render(uploadPage, { context });
+	return { page, toastManager, cleanup };
+};
+
 describe("Upload page", () => {
 	mockIDB();
 
+	it("says how to choose a save in the drop zone", () => {
+		const { page, cleanup } = renderUploadPage();
+		expect(page.getByLabelText("Save file").getAttribute("type")).toBe("file");
+		expect(page.getByTestId("upload-hint").textContent?.trim()).toBe(
+			"Click to select a file, or drag and drop here",
+		);
+		cleanup();
+	});
+
 	it("reports a file that looks compressed but isn't, and lets you pick another", async () => {
-		let saveManager!: SaveManager;
-		const cleanup = $effect.root(() => {
-			saveManager = new SaveManager();
-		});
-		const toastManager = new ToastManager();
-		const context = new Map<unknown, unknown>([
-			...setSaveManagerContext(saveManager),
-			...setToastManagerContext(toastManager),
-		]);
-		const page = render(uploadPage, { context });
+		const { page, toastManager, cleanup } = renderUploadPage();
 
 		// A first byte of 0x78 ("x") marks a zlib-compressed save; pako throws a string
 		const file = new File(["xyz, not a save"], "Farm_1");

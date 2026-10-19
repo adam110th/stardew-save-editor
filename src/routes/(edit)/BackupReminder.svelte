@@ -63,8 +63,8 @@
 			<code class="path">%appdata%\StardewValley\Saves</code>
 		</p>
 		<p class="small">
-			The editor also keeps a copy of every save you upload: use the CD icon on
-			the first page.
+			The editor also keeps temporary backups of the saves you upload: click the
+			CD icon on the upload page.
 		</p>
 		<label class="dont-remind">
 			<UiCheckbox bind:checked={dontRemind} data-testid="backup-dont-remind" />

@@ -4,7 +4,10 @@
 
     Taken from the game's WorldDate, LocationWeather,
     Game1.getWeatherModificationsForDate and Utility.isGreenRainDay, and the
-    wiki's Weather and Modding:Weather data pages.
+    wiki's Weather and Modding:Weather data pages. None of it is generated
+    (the festivals are from Data/Festivals/FestivalDates and
+    Data/PassiveFestivals), so check it when a game update changes festivals
+    or weather.
 */
 import { Season } from "$types/save";
 
