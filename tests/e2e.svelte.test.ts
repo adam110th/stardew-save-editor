@@ -528,7 +528,13 @@ describe("Save Manager Integration Tests", () => {
 			].map((layer) => layer.getAttribute("style") ?? "");
 			expect(styles.length).toBeGreaterThan(0);
 			expect(styles.join("\n")).not.toContain("attacker.example");
-			expect(styles.join("\n")).toContain("/img/male_farmer.png");
+			// Like the game, anything but Male draws the female farmer
+			expect(styles.join("\n")).toContain("/img/female_farmer.png");
+			expect(
+				page.container
+					.querySelector(".appearance")
+					?.classList.contains("female"),
+			).toBe(true);
 		});
 
 		it("should modify character appearance", () => {
