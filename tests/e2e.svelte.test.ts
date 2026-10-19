@@ -1654,6 +1654,188 @@ describe("Save Manager Integration Tests", () => {
 		});
 	});
 
+	describe("Chest types", () => {
+		const renderChests = (pageHarness = harness) => {
+			const toastManager = new ToastManager();
+			const context = setToastManagerContext(toastManager);
+			return {
+				page: pageHarness.render(chestsPage, { context }),
+				toastManager,
+			};
+		};
+
+		// The farm's chest, saved as a Mini-Shipping Bin instead
+		const asMiniShippingBin = (xml: string) => {
+			const start = xml.indexOf('<Object xsi:type="Chest">');
+			const end = xml.indexOf("<globalInventoryId>", start);
+			const bin = xml
+				.slice(start, end)
+				.replace("<name>Chest</name>", "<name>Mini-Shipping Bin</name>")
+				.replace(
+					"<parentSheetIndex>130</parentSheetIndex>",
+					"<parentSheetIndex>248</parentSheetIndex>",
+				)
+				.replace("<itemId>130</itemId>", "<itemId>248</itemId>")
+				.replace(
+					"<specialChestType>None</specialChestType>",
+					"<specialChestType>MiniShippingBin</specialChestType>",
+				);
+			return xml.slice(0, start) + bin + xml.slice(end);
+		};
+
+		it("changes a chest to a Big Chest and back, keeping its items in place", async () => {
+			const { page } = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			const slots = () =>
+				Array.from({ length: 36 }, (_, i) => chest.inventory.get(i));
+			// Leave a gap, which growing the chest keeps
+			chest.inventory.delete(0);
+			flushSync();
+			const before = slots();
+			const select = page.getByTestId("chest-0-type") as HTMLSelectElement;
+			expect(select.value).toBe("130");
+
+			await choose(select, "BigChest");
+			expect(chest.inventory.slotCount).toBe(70);
+			expect(chest[Raw]).toMatchObject({
+				itemId: "BigChest",
+				specialChestType: "BigChest",
+			});
+			expect(slots()).toEqual(before);
+			expect(page.getAllByTestId(/^chest-0-item-\d+$/)).toHaveLength(70);
+			expect(page.getByText("Farm - Big Chest (60, 15)")).toBeTruthy();
+
+			await choose(select, "130");
+			expect(chest.inventory.slotCount).toBe(36);
+			expect(slots()).toEqual(before);
+			expect(page.getByText("Farm - Chest (60, 15)")).toBeTruthy();
+		});
+
+		it("refuses a smaller type when the items won't fit", async () => {
+			const { page, toastManager } = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			const select = page.getByTestId("chest-0-type") as HTMLSelectElement;
+			await choose(select, "BigStoneChest");
+			// Too many items for 36 slots
+			for (let slot = 36; slot < 60; slot++)
+				chest.inventory.set(slot, ItemFactory.fromName("Parsnip"));
+			flushSync();
+			expect(chest.inventory.usedSlots).toBeGreaterThan(36);
+
+			const option = (value: string) =>
+				[...select.options].find((option) => option.value === value);
+			expect(option("232")?.disabled).toBe(true);
+			expect(option("BigChest")?.disabled).toBe(false);
+
+			await choose(select, "232");
+			expect(chest.type?.name).toBe("Big Stone Chest");
+			expect(chest.inventory.slotCount).toBe(70);
+			expect(select.value).toBe("BigStoneChest");
+			expect(toastManager.toasts.at(-1)?.message).toContain("won't fit");
+		});
+
+		it("expands a Mini-Shipping Bin into a Chest", async () => {
+			const binHarness = await createPageHarness(asMiniShippingBin);
+			try {
+				const { page } = renderChests(binHarness);
+				const bin = binHarness.saveManager.save?.chests[0];
+				expect(bin?.isMiniShippingBin).toBe(true);
+				expect(page.queryByTestId("chest-0-type")).toBeNull();
+
+				await fireEvent.click(page.getByTestId("chest-0-expand"));
+				expect(bin?.inventory.slotCount).toBe(36);
+				expect(bin?.[Raw]).toMatchObject({
+					name: "Chest",
+					itemId: "130",
+					specialChestType: "None",
+				});
+				expect(page.queryByTestId("chest-0-expand")).toBeNull();
+				expect(
+					(page.getByTestId("chest-0-type") as HTMLSelectElement).value,
+				).toBe("130");
+				expect(page.getByText("Farm - Chest (60, 15)")).toBeTruthy();
+			} finally {
+				binHarness.cleanup();
+			}
+		});
+
+		it("won't expand a Mini-Shipping Bin holding items for separate wallets", async () => {
+			const walletItems = (xml: string) =>
+				asMiniShippingBin(xml).replace(
+					"<SerializableDictionaryOfInt64Inventory />",
+					"<SerializableDictionaryOfInt64Inventory><item><key><long>1</long></key><value><Inventory><Item><name>Parsnip</name><itemId>24</itemId><stack>1</stack></Item></Inventory></value></item></SerializableDictionaryOfInt64Inventory>",
+				);
+			const binHarness = await createPageHarness(walletItems);
+			try {
+				const { page, toastManager } = renderChests(binHarness);
+				const bin = binHarness.saveManager.save?.chests[0];
+				expect(bin?.hasSeparateWalletItems).toBe(true);
+				const expand = page.getByTestId("chest-0-expand") as HTMLButtonElement;
+				expect(expand.disabled).toBe(true);
+
+				await fireEvent.click(expand);
+				expect(toastManager.toasts).toHaveLength(0);
+				expect(() => bin?.expandMiniShippingBin()).toThrow("separate wallets");
+				expect(bin?.[Raw]).toMatchObject({
+					name: "Mini-Shipping Bin",
+					itemId: 248,
+				});
+			} finally {
+				binHarness.cleanup();
+			}
+		});
+
+		it("offers no type for the kitchen fridge", async () => {
+			const { page } = renderChests();
+			// It's saved as a Chest (130) placed by the player
+			expect(saveManager.save?.chests[1]?.[Raw]).toMatchObject({
+				itemId: 130,
+				playerChest: true,
+			});
+			await choose(page.getByTestId("chest-group"), "farmhouse-fridges");
+			expect(page.getAllByTestId("chest-section")).toHaveLength(1);
+			expect(page.queryByLabelText("Chest type")).toBeNull();
+			expect(page.queryByTestId("chest-1-expand")).toBeNull();
+		});
+
+		it("says so when nothing listed can have a quality", async () => {
+			const { page, toastManager } = renderChests();
+			await choose(page.getByTestId("chest-group"), "farm-fridges");
+			await fireEvent.click(page.getByTestId("chest-quality-4"));
+			expect(toastManager.toasts.at(-1)?.message).toBe(
+				"No items in farm / cabin fridges can have a quality",
+			);
+		});
+
+		it("leaves things that keep something else in their quality alone", async () => {
+			const { page, toastManager } = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			// The Rarecrow that wears a hat keeps the hat in its quality (Object.draw);
+			// saplings have no quality either
+			const sapling = ItemFactory.fromName("Cherry Sapling");
+			const rarecrow = ItemFactory.fromKey("126", "BigCraftable");
+			chest.inventory.set(30, sapling);
+			chest.inventory.set(31, rarecrow);
+			sapling[Raw].quality = 3;
+			rarecrow[Raw].quality = 1;
+			flushSync();
+			const eligible = [...chest.inventory.values()].filter(
+				(item) => item && canHaveQuality(item),
+			).length;
+
+			await fireEvent.click(page.getByTestId("chest-quality-2"));
+			flushSync();
+			expect(sapling[Raw].quality).toBe(3);
+			expect(rarecrow[Raw].quality).toBe(1);
+			expect(toastManager.toasts.at(-1)?.message).toBe(
+				`Set ${eligible} items in chests to Gold quality`,
+			);
+		});
+	});
+
 	describe("Chests", () => {
 		const eligible = (chestIndex: number) =>
 			[...(saveManager.save?.chests[chestIndex]?.inventory.values() ?? [])]

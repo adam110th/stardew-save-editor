@@ -210,6 +210,8 @@
 		if (!type || type === chest.type) return;
 		try {
 			chest.setType(type);
+			// Items may have moved up to fit
+			picked = [];
 			if (chest === selectedChest && selectedIndex >= type.capacity)
 				selectedIndex = 0;
 			toastManager.add(new Toast(`Changed to a ${type.name}`, "success"));
@@ -221,8 +223,14 @@
 	};
 
 	const expandBin = (chest: ChestProxy) => {
-		chest.expandMiniShippingBin();
-		toastManager.add(new Toast("Expanded to a 36-slot Chest", "success"));
+		try {
+			chest.expandMiniShippingBin();
+			toastManager.add(new Toast("Expanded to a 36-slot Chest", "success"));
+		} catch (e) {
+			toastManager.add(
+				new Toast(e instanceof Error ? e.message : String(e), "failure"),
+			);
+		}
 	};
 
 	/** Set every item that can have a quality to `quality`, in every chest listed */
@@ -343,9 +351,12 @@
 								<button
 									type="button"
 									class="chest-type"
+									disabled={chest.hasSeparateWalletItems}
 									onclick={() => expandBin(chest)}
 									data-testid={`chest-${chestIndex}-expand`}
-									title="Becomes a regular Chest. It keeps its items, but no longer adds them to the nightly shipment"
+									title={chest.hasSeparateWalletItems
+										? "It holds items for separate wallets, which a Chest wouldn't show"
+										: "Becomes a regular Chest. It keeps its items, but no longer adds them to the nightly shipment"}
 								>
 									Expand to 36 slots
 								</button>
@@ -568,6 +579,11 @@
 		background-color: #f9bb65;
 		color: inherit;
 		cursor: pointer;
+	}
+
+	.chest-type:disabled {
+		cursor: not-allowed;
+		opacity: 0.6;
 	}
 
 	.chest h4 {
