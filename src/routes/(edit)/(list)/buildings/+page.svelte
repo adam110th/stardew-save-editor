@@ -2,7 +2,6 @@
 	import { ItemData } from "$lib/ItemData";
 	import { Raw } from "$lib/proxies";
 	import type { FarmAnimal } from "$lib/proxies/FarmAnimal.svelte";
-	import { Item } from "$lib/proxies/Item.svelte";
 	import { getSaveManager } from "$lib/SaveManager.svelte";
 	import EmojiRange from "$lib/ui/EmojiRange.svelte";
 	import UiCheckbox from "$lib/ui/UICheckbox.svelte";
@@ -11,7 +10,7 @@
 	import UiInput from "$lib/ui/UIInput.svelte";
 	import { Gender } from "$types/save";
 	import BuildingSprite from "../../inventory/BuildingSprite.svelte";
-	import ItemSprite from "../../inventory/ItemSprite.svelte";
+	import NamedItemSprite from "../../inventory/NamedItemSprite.svelte";
 	import BuildingControls from "./BuildingControls.svelte";
 
 	let saveManager: ReturnType<typeof getSaveManager> | undefined;
@@ -131,9 +130,7 @@
 													<li title={material.item}>
 														{#if ItemData.has(material.item)}
 															<span class="material-icon">
-																<ItemSprite
-																	item={Item.fromName(material.item)}
-																/>
+																<NamedItemSprite name={material.item} />
 															</span>
 														{/if}
 														{material.amount}{ItemData.has(material.item)

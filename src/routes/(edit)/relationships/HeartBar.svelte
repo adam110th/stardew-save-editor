@@ -2,13 +2,12 @@
 	import { asset } from "$app/paths";
 	import { LovedGifts } from "$lib/LovedGifts";
 	import type { Friendship } from "$lib/proxies/Friendship.svelte";
-	import { Item } from "$lib/proxies/Item.svelte";
 	import EmojiRange from "$lib/ui/EmojiRange.svelte";
 	import UiContainerSmall from "$lib/ui/UIContainerSmall.svelte";
 	import UiInput from "$lib/ui/UIInput.svelte";
 	import { Villagers } from "$lib/Villagers";
 	import type { LovedGift } from "$types/giftTastes";
-	import ItemSprite from "../inventory/ItemSprite.svelte";
+	import NamedItemSprite from "../inventory/NamedItemSprite.svelte";
 
 	interface Props {
 		name: string;
@@ -49,7 +48,7 @@
 		title={gift.items ? `${gift.name}: ${gift.items.join(", ")}` : gift.name}
 		data-testid={testId}
 	>
-		<ItemSprite item={Item.fromName(gift.item)} />
+		<NamedItemSprite name={gift.item} />
 	</div>
 	{#if gift.items}
 		<!-- A whole category, such as every book: say so next to the icon -->

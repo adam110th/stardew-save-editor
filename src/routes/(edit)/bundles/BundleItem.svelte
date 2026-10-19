@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { untrack } from "svelte";
+	import { Dispose } from "$lib/proxies";
 	import { Item } from "$lib/proxies/Item.svelte";
+	import type { ItemProxy } from "$lib/proxies/items";
 	import UiCheckbox from "$lib/ui/UICheckbox.svelte";
 	import ItemSprite from "../inventory/ItemSprite.svelte";
 
@@ -45,21 +48,31 @@
 		[4, "Iridium"],
 	]);
 
-	const item = $derived.by(() => {
-		const key = typeof itemId === "number" ? itemId.toString() : itemId;
+	function resolve(key: string, itemType: string) {
 		if (!key) return undefined;
 		// If key looks like a number <= 0, treat as gold (no item)
 		if (/^-?\d+$/.test(key) && Number.parseInt(key, 10) <= 0) return undefined;
 		try {
-			return Item.fromKey(key, matchedType);
+			return Item.fromKey(key, itemType);
 		} catch (e) {
 			console.warn("BundleItem: failed to resolve item by key", {
 				key,
-				type: matchedType,
+				type: itemType,
 				error: e,
 			});
 			return undefined;
 		}
+	}
+
+	// An item proxy holds an effect root, so dispose of the one shown here when
+	// the bundle item changes or goes away
+	let item = $state.raw<ItemProxy>();
+	$effect.pre(() => {
+		const key = typeof itemId === "number" ? itemId.toString() : itemId;
+		const itemType = matchedType;
+		const created = untrack(() => resolve(key, itemType));
+		item = created;
+		return () => created?.[Dispose]?.();
 	});
 </script>
 
