@@ -1243,6 +1243,8 @@ describe("Save Manager Integration Tests", () => {
 			await fireEvent.input(gifts, { target: { value: "2" } });
 			flushSync();
 			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(2);
+
+			// Reset, so they can be given gifts again this week
 			await fireEvent.input(gifts, { target: { value: "0" } });
 			flushSync();
 			expect(friendship[Raw].value.Friendship.GiftsThisWeek).toBe(0);

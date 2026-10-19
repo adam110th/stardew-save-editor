@@ -71,7 +71,7 @@
 			<strong data-testid="friendship-name">{name}</strong>
 			<label
 				class="gifts"
-				title="Gifts given this week, which starts on Sunday. The game allows 2 a week, plus one on their birthday, and a spouse one a day; a week with 2 gives +10 friendship when it ends. The count only lasts the week if they were given a gift this week: otherwise it goes back to 0 overnight, still giving the +10 if it's 2 or more."
+				title="Gifts given this week, which starts on Sunday. Villagers take 2 a week, plus one on their birthday, and a spouse one a day; a week with 2 gives +10 friendship when it ends. The count only lasts the week if they were given a gift this week: otherwise it goes back to 0 overnight, still giving the +10 if it's 2 or more."
 			>
 				🎁
 				<UiInput
