@@ -80,7 +80,7 @@ const downloadFile = async (blob: Blob, filename: string) => {
 /** Thrown by download() when the exported save fails validation */
 export class SaveValidationError extends Error {
 	constructor(readonly validation: SaveValidation) {
-		super(`Save file is not valid: ${describeProblems(validation)}`);
+		super(`Save file not downloaded: ${describeProblems(validation)}`);
 	}
 }
 
@@ -145,6 +145,7 @@ export class SaveManager {
 			throw new Error(`Unsupported game version: ${json.SaveGame.gameVersion}`);
 		}
 
+		// Checked before the editor touches anything, so it reflects the uploaded file
 		const validation = validateSave(json);
 
 		await this.handleBackup(file);

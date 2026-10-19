@@ -378,7 +378,7 @@ describe("SaveManager validation", () => {
 		const bad = await saveManager.validatedExport();
 		expect(bad.validation.valid).toBe(false);
 		await expect(saveManager.download()).rejects.toThrow(
-			"Save file is not valid",
+			"Save file not downloaded: Test's money (2147483648) is out of range",
 		);
 	});
 });
