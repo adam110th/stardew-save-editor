@@ -53,6 +53,8 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - View settings fixed at farm creation (farm type, random seed, and more)
 - ✅ Community Center
   - Tick donated items, or complete a whole bundle or room at once
+  - Change the items each bundle asks for: swap, add or remove items, change their amount and
+    minimum quality and how many finish the bundle, or a Vault bundle's price
   - Finished bundles leave their rewards to collect in-game
   - Joja route: buy Community Development projects instead
 - ✅ Buildings
