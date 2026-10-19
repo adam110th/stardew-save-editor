@@ -31,6 +31,19 @@ describe("building costs", () => {
 		).toEqual([]);
 	});
 
+	it("counts one of a material without an amount", () => {
+		expect(
+			getBuildMaterials(
+				[{ ItemId: "(O)388" }, { ItemId: "(O)390", Amount: null }],
+				names,
+			),
+		).toEqual([
+			{ item: "Wood", amount: 1 },
+			{ item: "Stone", amount: 1 },
+		]);
+		expect(getBuildMaterials([{ ItemId: null, Amount: 5 }], names)).toEqual([]);
+	});
+
 	it("handles buildings without materials", () => {
 		expect(getBuildMaterials(null, names)).toEqual([]);
 		expect(getBuildMaterials(undefined, names)).toEqual([]);
