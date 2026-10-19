@@ -1699,6 +1699,25 @@ describe("Save Manager Integration Tests", () => {
 			expect(dimmed(1)).toBe(false);
 		});
 
+		it("shows each search result's amount as edited", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			const parsnip = ItemFactory.fromName("Parsnip");
+			chest.inventory.set(0, parsnip);
+			flushSync();
+			// What the item editor's Amount field changes
+			parsnip.amount = 7;
+			flushSync();
+
+			await fireEvent.input(page.getByTestId("chest-search"), {
+				target: { value: "parsnip" },
+			});
+			expect(page.getByTestId("chest-search-result-0-0").textContent).toContain(
+				"Parsnip ×7",
+			);
+		});
+
 		it("jumps to a search result in another group", async () => {
 			const page = renderChests();
 			const { chest, index } = chestIn("IslandFarmHouse");
