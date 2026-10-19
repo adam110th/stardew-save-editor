@@ -77,7 +77,7 @@
 		<h3>
 			Required Items
 			{#if bundle.requiredItemCount < bundle.requiredItems.length}
-				<small
+				<small data-testid="bundle-pick"
 					>(any {bundle.requiredItemCount} of {bundle.requiredItems
 						.length})</small
 				>

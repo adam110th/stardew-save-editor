@@ -247,17 +247,23 @@ export class CommunityBundles extends SvelteMap<BundleName, Bundle> {
 
 	/**
 	 * Mirror the game: finishing a bundle leaves its reward waiting in
-	 * bundleRewards, collected from the present in that room's bundle menu.
-	 * Un-finishing a bundle takes back a reward that hasn't been collected.
+	 * bundleRewards, collected from the present in that room's bundle menu
+	 * (JunimoNoteMenu.checkIfBundleIsComplete). Un-finishing a bundle takes
+	 * back a reward that hasn't been collected.
 	 */
 	private updateRewards(completion: Map<BundleName, boolean>) {
 		const ccRaw = this.communityCenter[Raw] as GameLocationRaw;
 		for (const [id, completed] of completion) {
 			if (this.lastCompletion.get(id) === completed) continue;
-			// The Missing Bundle's reward crashes the game (see sanitizeBundleRewards)
-			if (id === MISSING_BUNDLE && completed) continue;
+			// A waiting reward for a bundle without one (the Missing Bundle) crashes
+			// the game, which builds it from the empty reward text (see sanitizeBundleRewards)
+			if (completed && (id === MISSING_BUNDLE || !this.get(id)?.reward?.item))
+				continue;
 
-			ccRaw.bundleRewards ??= { item: [] };
+			// An empty <bundleRewards /> parses as ""
+			if (typeof ccRaw.bundleRewards !== "object" || !ccRaw.bundleRewards)
+				ccRaw.bundleRewards = { item: [] };
+			ccRaw.bundleRewards.item ??= [];
 			const entry = ccRaw.bundleRewards.item.find((kv) => kv.key.int === id);
 			if (entry) entry.value.boolean = completed;
 			else
@@ -380,20 +386,28 @@ export class Bundle {
 		return parseBundleValue(this.bundleData.string);
 	}
 
-	/** Tick items until enough are submitted to finish the bundle */
+	/**
+	 * Donate every item, as finishing a bundle in-game does: the game then marks
+	 * every one of its slots as done (JunimoNoteMenu.checkIfBundleIsComplete),
+	 * and only counts a bundle as complete when they all are
+	 * (CommunityCenter.isBundleComplete)
+	 */
 	complete() {
-		let submitted = this.requiredItems.filter((i) => i.submitted).length;
-		for (const item of this.requiredItems) {
-			if (submitted >= this.requiredItemCount) break;
-			if (item.submitted) continue;
-			item.submitted = true;
-			submitted++;
-		}
+		this.setAllSlots(true);
 	}
 
-	/** Untick every item */
+	/** Take back every donated item */
 	clear() {
-		for (const item of this.requiredItems) item.submitted = false;
+		this.setAllSlots(false);
+	}
+
+	private setAllSlots(donated: boolean) {
+		for (const item of this.requiredItems) item.submitted = donated;
+		// The game keeps three slots per item, and only the first one for each item is
+		// ticked by a donation; finishing the bundle ticks the rest too
+		const slots = this.submitted.boolean;
+		for (let i = this.requiredItems.length; i < slots.length; i++)
+			slots[i] = donated;
 	}
 }
 

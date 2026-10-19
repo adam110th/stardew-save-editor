@@ -291,6 +291,35 @@ describe("Save Manager Integration Tests", () => {
 			);
 		});
 
+		it("completes one bundle from its card, ticking all of its slots", async () => {
+			const page = harness.render(bundlesPage);
+			flushSync();
+			const membership = page.getByTestId(
+				"joja-membership-checkbox",
+			) as HTMLInputElement;
+			if (membership.checked) await fireEvent.click(membership);
+
+			const card = page
+				.getAllByTestId("bundle-card")
+				.find(
+					(c) => c.getAttribute("data-bundle-name") === "Spring Crops",
+				) as HTMLElement;
+			const toggle = within(card).getByTestId("bundle-toggle");
+			await fireEvent.click(toggle);
+			expect(within(card).getByTestId("bundle-progress").textContent).toContain(
+				"4/4",
+			);
+			expect(toggle.textContent).toContain("Clear");
+
+			// Spring Crops is bundle 0; the game keeps three slots for each of its items
+			const cc = saveManager.save?.locations.find(
+				(l) => l[Raw].name === "CommunityCenter",
+			);
+			const slots = cc?.[Raw].bundles?.item.find((kv) => kv.key.int === 0)
+				?.value.ArrayOfBoolean.boolean;
+			expect(slots).toEqual(new Array(12).fill(true));
+		});
+
 		it("should toggle Joja membership and set a project", async () => {
 			const page = harness.render(bundlesPage);
 			const membership = page.getByTestId(
