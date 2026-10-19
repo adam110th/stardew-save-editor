@@ -2239,6 +2239,26 @@ describe("Save Manager Integration Tests", () => {
 			}
 		});
 
+		it("shows what the save's buildings cost to build, from the game data", () => {
+			const page = harness.render(buildingsPage);
+			// The farmhouse and greenhouse can't be built, so only these two have a cost
+			expect(page.getAllByTestId("building-cost")).toHaveLength(2);
+
+			const bin = page.getByLabelText("Shipping Bin build cost");
+			expect(within(bin).getByTitle("Gold").textContent?.trim()).toBe("250g");
+			expect(within(bin).getByTitle("Wood").textContent?.trim()).toBe("150");
+
+			const bowl = page.getByLabelText("Pet Bowl build cost");
+			expect(within(bowl).getByTitle("Gold").textContent?.trim()).toBe(
+				`${(5000).toLocaleString()}g`,
+			);
+			const hardwood = within(bowl).getByTitle("Hardwood");
+			expect(hardwood.textContent?.trim()).toBe("25");
+			// Read out as the amount and the item, not just the number by its icon
+			expect(hardwood.getAttribute("aria-label")).toBe("25 Hardwood");
+			expect(hardwood.querySelector(".item")).toBeTruthy();
+		});
+
 		it("should update farm animal numeric stat inputs", async () => {
 			const save = saveManager.save;
 			if (!save?.farm) return;

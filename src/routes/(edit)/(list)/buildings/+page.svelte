@@ -128,7 +128,10 @@
 													</li>
 												{/if}
 												{#each building.data.buildMaterials ?? [] as material (material.item)}
-													<li title={material.item}>
+													<li
+														title={material.item}
+														aria-label={`${material.amount} ${material.item}`}
+													>
 														{#if ItemData.has(material.item)}
 															<span class="material-icon">
 																<ItemSprite
