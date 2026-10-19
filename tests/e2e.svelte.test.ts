@@ -1481,6 +1481,10 @@ describe("Save Manager Integration Tests", () => {
 			const page = harness.render(editorPage, {
 				context: setToastManagerContext(toastManager),
 			});
+			// Headed like the chests page, with the sort button beside the title
+			expect(page.getByRole("heading", { level: 3 }).textContent).toBe(
+				"Inventory",
+			);
 			await fireEvent.click(page.getByTestId("sort-inventory"));
 			const used = [...Array(inventory.slotCount).keys()].filter(
 				(i) => inventory.get(i) !== undefined,
