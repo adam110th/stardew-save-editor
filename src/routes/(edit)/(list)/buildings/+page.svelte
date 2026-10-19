@@ -127,7 +127,10 @@
 													</li>
 												{/if}
 												{#each building.data.buildMaterials ?? [] as material (material.item)}
-													<li title={material.item}>
+													<li
+														title={material.item}
+														aria-label={`${material.amount} ${material.item}`}
+													>
 														{#if ItemData.has(material.item)}
 															<span class="material-icon">
 																<NamedItemSprite name={material.item} />
@@ -300,6 +303,7 @@
 																<small>Allow Pregnancy</small>
 																<UiCheckbox
 																	bind:checked={animal.allowReproduction}
+																	aria-label={`${animal.name || animal.type} can get pregnant`}
 																	data-testid="animal-allow-pregnancy"
 																/>
 															</label>
@@ -313,6 +317,7 @@
 																<small>Golden Cracker</small>
 																<UiCheckbox
 																	bind:checked={animal.hasEatenAnimalCracker}
+																	aria-label={`${animal.name || animal.type} has eaten a Golden Animal Cracker`}
 																	data-testid="animal-golden-cracker"
 																/>
 															</label>

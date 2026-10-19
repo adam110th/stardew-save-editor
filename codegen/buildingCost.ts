@@ -7,9 +7,13 @@ export interface BuildMaterial {
 /**
     Map a building's `BuildMaterials` from Data/Buildings.json to item names.
     Materials use qualified IDs like `(O)388`; ones that aren't objects are dropped.
+    A material without an amount is shown as one. The JSON can hold nulls.
 */
 export function getBuildMaterials(
-	materials: { ItemId?: string; Amount?: number }[] | null | undefined,
+	materials:
+		| { ItemId?: string | null; Amount?: number | null }[]
+		| null
+		| undefined,
 	objectNames: ReadonlyMap<string, string>,
 ): BuildMaterial[] {
 	return (materials ?? []).flatMap(({ ItemId, Amount }) => {

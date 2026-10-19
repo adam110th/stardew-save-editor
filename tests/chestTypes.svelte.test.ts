@@ -37,6 +37,7 @@ const rawChest = (
 		fridge: false,
 		specialChestType: "None",
 		playerChoiceColor: { R: 0, G: 170, B: 0, A: 255 },
+		separateWalletItems: { SerializableDictionaryOfInt64Inventory: "" },
 		items: { Item: items },
 		...fields,
 	}) as unknown as RawChest;
@@ -98,9 +99,11 @@ describe("changing a chest's type", () => {
 		cleanup();
 	});
 
-	it("expands a Chest to a 70-slot Big Chest", () => {
+	it("expands a Chest to a 70-slot Big Chest, leaving items where they are", () => {
 		const raw = rawChest({});
 		const { chest, cleanup } = load(raw);
+		const stone = chest.inventory.take(1);
+		if (stone) chest.inventory.place(20, stone);
 
 		chest.setType(type("Big Chest"));
 		expect(raw).toMatchObject({
@@ -112,6 +115,7 @@ describe("changing a chest's type", () => {
 		});
 		expect(chest.inventory.slotCount).toBe(70);
 		expect(chest.inventory.usedSlots).toBe(2);
+		expect(chest.inventory.get(20)).toBe(stone);
 		expect(itemNames(raw)).toEqual(["Wood", "Stone"]);
 
 		// Big Chest <-> Big Stone Chest is the same size, so it's allowed
@@ -177,6 +181,74 @@ describe("changing a chest's type", () => {
 		expect(chest.inventory.slotCount).toBe(36);
 		expect(chest.isMiniShippingBin).toBe(false);
 		expect(itemNames(raw)).toEqual(["Wood", "Stone"]);
+		cleanup();
+	});
+
+	it("won't expand a Mini-Shipping Bin holding items for separate wallets", () => {
+		const raw = rawChest({
+			name: "Mini-Shipping Bin",
+			itemId: 248,
+			parentSheetIndex: 248,
+			specialChestType: "MiniShippingBin",
+			separateWalletItems: {
+				SerializableDictionaryOfInt64Inventory: {
+					item: {
+						key: { long: 123 },
+						value: { Inventory: { Item: [item("Parsnip", "24")] } },
+					},
+				},
+			},
+		});
+		const { chest, cleanup } = load(raw);
+		expect(chest.isMiniShippingBin).toBe(true);
+		expect(chest.hasSeparateWalletItems).toBe(true);
+		expect(() => chest.expandMiniShippingBin()).toThrow("separate wallets");
+		expect(raw).toMatchObject({ itemId: 248, name: "Mini-Shipping Bin" });
+		expect(chest.inventory.slotCount).toBe(9);
+		cleanup();
+	});
+
+	it("leaves the kitchen fridge and machines' storage alone", () => {
+		// The kitchen fridge is saved as a placed Chest (130), like an auto-grabber's storage
+		const save = {
+			locations: {
+				GameLocation: [
+					{
+						name: "FarmHouse",
+						fridge: rawChest({}),
+						objects: {
+							item: [
+								{
+									key: { Vector2: { X: 2, Y: 1 } },
+									value: {
+										Object: {
+											"@_xsi:type": "Object",
+											name: "Auto-Grabber",
+											heldObject: rawChest({}),
+										},
+									},
+								},
+							],
+						},
+						buildings: "",
+					},
+				],
+			},
+		} as unknown as Save;
+		let kinds: string[] = [];
+		const cleanup = $effect.root(() => {
+			const chests = discoverChests(save);
+			kinds = chests.map((chest) => chest.metadata.kind);
+			for (const chest of chests) {
+				expect(chest.type).toBeUndefined();
+				expect(chest.isMiniShippingBin).toBe(false);
+				expect(() => chest.setType(type("Big Chest"))).toThrow(
+					"can't be changed",
+				);
+				expect(chest.inventory.slotCount).toBe(36);
+			}
+		});
+		expect(kinds).toEqual(["fridge", "machine"]);
 		cleanup();
 	});
 

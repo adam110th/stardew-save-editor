@@ -17,6 +17,8 @@ export type RawChest = RawItem & {
 	fridge?: boolean;
 	specialChestType?: string;
 	globalInventoryId?: { string?: string } | "";
+	currentLidFrame?: number;
+	separateWalletItems?: unknown;
 };
 
 export type ChestKind = "chest" | "fridge" | "machine" | "building";
@@ -89,19 +91,24 @@ export class ChestInventory extends SvelteMap<number, ItemProxy | undefined> {
 	}
 
 	/**
-	    Change how many slots the chest has. Items move up to fill gaps first, so
-	    shrinking only fails if they genuinely don't fit.
+	    Change how many slots the chest has. Items keep their slots when they
+	    still fit, as when a chest grows; otherwise they move up to close the
+	    gaps, so shrinking only fails if they genuinely don't fit.
 	*/
 	resize(slotCount: number) {
-		const items = [...this.values()].filter((item) => item !== undefined);
+		const slots = Array.from({ length: this.slotCount }, (_, index) =>
+			this.get(index),
+		);
+		const items = slots.filter((item) => item !== undefined);
 		if (items.length > slotCount)
 			throw new Error(
 				`${items.length} items won't fit in ${slotCount} slots; remove some first`,
 			);
+		const keepSlots = !slots.slice(slotCount).some(Boolean);
 		super.clear();
 		this.slotCount = slotCount;
 		for (let index = 0; index < slotCount; index++)
-			super.set(index, items[index]);
+			super.set(index, keepSlots ? slots[index] : items[index]);
 		this.syncRawItems();
 	}
 
@@ -201,6 +208,11 @@ export type SwappableChest = (typeof SwappableChests)[number];
 
 const MINI_SHIPPING_BIN = "248";
 
+/** Whether there's a saved item anywhere inside `value` */
+const holdsItems = (value: unknown): boolean =>
+	isRecord(value) &&
+	("itemId" in value || Object.values(value).some(holdsItems));
+
 export class ChestProxy implements DataProxy<RawChest> {
 	public [Raw]: RawChest;
 	public readonly inventory: ChestInventory;
@@ -216,11 +228,20 @@ export class ChestProxy implements DataProxy<RawChest> {
 	) {
 		this[Raw] = chest;
 		this.inventory = new ChestInventory(chest);
+		// Only chests players place can be swapped: the kitchen fridge and machines'
+		// storage are saved as Chests (130) too
 		this.type = $state(
-			SwappableChests.find((t) => t.itemId === String(chest.itemId)),
+			this.#placedByPlayer
+				? SwappableChests.find((t) => t.itemId === String(chest.itemId))
+				: undefined,
 		);
 		this.#originalName = String(chest.name ?? "");
 		this.#name = this.#originalName;
+	}
+
+	/** Placed by a player, rather than a fridge, or a machine's or building's storage */
+	get #placedByPlayer() {
+		return this.metadata.kind === "chest" && this[Raw].playerChest === true;
 	}
 
 	/** The metadata label, kept up to date if the chest changes kind */
@@ -233,7 +254,17 @@ export class ChestProxy implements DataProxy<RawChest> {
 
 	/** A Mini-Shipping Bin only has 9 slots, fixed by its type */
 	get isMiniShippingBin() {
-		return String(this[Raw].itemId) === MINI_SHIPPING_BIN;
+		return (
+			this.#placedByPlayer && String(this[Raw].itemId) === MINI_SHIPPING_BIN
+		);
+	}
+
+	/**
+	    With separate wallets, a Mini-Shipping Bin keeps each farmer's items
+	    apart from its own list. A Chest would never show them.
+	*/
+	get hasSeparateWalletItems() {
+		return holdsItems(this[Raw].separateWalletItems);
 	}
 
 	/**
@@ -242,6 +273,7 @@ export class ChestProxy implements DataProxy<RawChest> {
 	    kind is only allowed if all the items fit, so nothing is lost.
 	*/
 	setType(type: SwappableChest) {
+		if (!this.type) throw new Error("This container's type can't be changed");
 		// Shrinking is only allowed when every item fits (resize refuses otherwise)
 		this.inventory.resize(type.capacity);
 		this.#becomeChest(type);
@@ -253,13 +285,17 @@ export class ChestProxy implements DataProxy<RawChest> {
 	*/
 	expandMiniShippingBin() {
 		if (!this.isMiniShippingBin) throw new Error("Not a Mini-Shipping Bin");
+		if (this.hasSeparateWalletItems)
+			throw new Error(
+				"This bin holds items for separate wallets, which a Chest wouldn't show",
+			);
 		const chest = SwappableChests[0];
 		this.inventory.resize(chest.capacity);
 		this.#becomeChest(chest);
 	}
 
 	#becomeChest(type: SwappableChest) {
-		const raw = this[Raw] as RawChest & Record<string, unknown>;
+		const raw = this[Raw];
 		raw.name = type.name;
 		raw.itemId = type.itemId;
 		raw.parentSheetIndex = type.sprite;

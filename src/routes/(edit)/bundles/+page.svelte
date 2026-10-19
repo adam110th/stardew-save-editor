@@ -45,7 +45,7 @@
 			icon: "📌",
 			reward:
 				"Friendship boost (+2 hearts with all non-marriageable villagers)",
-			note: "Restoring the room puts the villagers' thank-you letter in the mailbox; the hearts are added when it's read in-game.",
+			note: "Restoring the room puts the villagers' thank-you letter in each farmer's mailbox; the hearts are added when it's read in-game.",
 		},
 		[CCRoom.Vault]: {
 			name: "Vault",
@@ -141,7 +141,7 @@
 			Tick the items that have been donated. Finishing every bundle in a room
 			restores it and unlocks its reward, shown under each room. Each finished
 			bundle's reward waits in that room's bundle menu in-game, ready to
-			collect.
+			collect. Open a bundle and use Edit items to change what it asks for.
 		</p>
 
 		<div class="wrapper" data-testid="bundle-wrapper">
