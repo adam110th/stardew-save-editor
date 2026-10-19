@@ -303,6 +303,7 @@
 																<small>Allow Pregnancy</small>
 																<UiCheckbox
 																	bind:checked={animal.allowReproduction}
+																	aria-label={`${animal.name || animal.type} can get pregnant`}
 																	data-testid="animal-allow-pregnancy"
 																/>
 															</label>
@@ -316,6 +317,7 @@
 																<small>Golden Cracker</small>
 																<UiCheckbox
 																	bind:checked={animal.hasEatenAnimalCracker}
+																	aria-label={`${animal.name || animal.type} has eaten a Golden Animal Cracker`}
 																	data-testid="animal-golden-cracker"
 																/>
 															</label>

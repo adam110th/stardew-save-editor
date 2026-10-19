@@ -3170,6 +3170,10 @@ describe("Animal buildings", () => {
 		const pregnancy = within(daisy).getByTestId(
 			"animal-allow-pregnancy",
 		) as HTMLInputElement;
+		// Named after the animal, so a screen reader can tell the cards apart
+		expect(
+			within(daisy).getByRole("checkbox", { name: "Daisy can get pregnant" }),
+		).toBe(pregnancy);
 		expect(pregnancy.checked).toBe(true);
 		await fireEvent.click(pregnancy);
 		flushSync();
@@ -3178,11 +3182,18 @@ describe("Animal buildings", () => {
 		const cracker = within(daisy).getByTestId(
 			"animal-golden-cracker",
 		) as HTMLInputElement;
+		expect(cracker.getAttribute("aria-label")).toBe(
+			"Daisy has eaten a Golden Animal Cracker",
+		);
 		expect(cracker.checked).toBe(false);
 		await fireEvent.click(cracker);
 		flushSync();
 		expect(raw(BARN_ANIMALS.daisy)?.hasEatenAnimalCracker).toBe(true);
 		expect(raw(BARN_ANIMALS.bessie)?.hasEatenAnimalCracker).toBe(false);
+
+		await fireEvent.click(cracker);
+		flushSync();
+		expect(raw(BARN_ANIMALS.daisy)?.hasEatenAnimalCracker).toBe(false);
 	});
 
 	it("doesn't offer pigs a Golden Animal Cracker", () => {
