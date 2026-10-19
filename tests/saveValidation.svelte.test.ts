@@ -165,14 +165,45 @@ describe("validateSave", () => {
 			(p: SaveFile) => {
 				p.SaveGame.currentSeason = "autumn" as Season;
 			},
-			'"autumn" isn\'t a season',
+			"The season (autumn) isn't spring, summer, fall or winter",
 		],
 		[
-			"a stat that isn't an unsigned int",
+			"a missing season",
 			(p: SaveFile) => {
-				daysPlayedStat(p.SaveGame.player).value.unsignedInt = -102;
+				Reflect.deleteProperty(p.SaveGame, "currentSeason");
 			},
-			"Test's daysPlayed stat (-102) is out of range",
+			"The season (missing) isn't spring, summer, fall or winter",
+		],
+		[
+			"a season number the game doesn't have",
+			(p: SaveFile) => {
+				p.SaveGame.currentSeason = "4" as Season;
+			},
+			"The season (4) isn't spring, summer, fall or winter",
+		],
+		[
+			"a day of the month the game can't read",
+			(p: SaveFile) => {
+				p.SaveGame.dayOfMonth = "first" as unknown as number;
+			},
+			"The day of the month (first) isn't a number the game can read",
+		],
+		[
+			"a year too big for the game's int",
+			(p: SaveFile) => {
+				p.SaveGame.year = 2 ** 31;
+			},
+			"The year (2147483648) isn't a number the game can read",
+		],
+		[
+			"a farmhand's stat the game can't read",
+			(p: SaveFile) => {
+				// An unclaimed cabin's farmhand, whose stats are still read
+				const farmhand = { ...structuredClone(p.SaveGame.player), name: "" };
+				daysPlayedStat(farmhand).value.unsignedInt = -1;
+				p.SaveGame.farmhands = { Farmer: [farmhand] };
+			},
+			"Farmhand 1's daysPlayed stat (-1) is out of range",
 		],
 	])("rejects %s", (_, breakIt, message) => {
 		const parsed = loadParsed();
@@ -287,12 +318,47 @@ describe("validateSave", () => {
 			},
 			"1 item has a stack of less than 1",
 		],
+		[
+			"day 29, a date the game never makes",
+			(p: SaveFile) => {
+				p.SaveGame.dayOfMonth = 29;
+			},
+			"The day of the month (29) isn't 1 to 28",
+		],
+		[
+			"day 0, a date the game never makes",
+			(p: SaveFile) => {
+				p.SaveGame.dayOfMonth = 0;
+			},
+			"The day of the month (0) isn't 1 to 28",
+		],
+		[
+			"a missing day of the month, which loads as day 0",
+			(p: SaveFile) => {
+				Reflect.deleteProperty(p.SaveGame, "dayOfMonth");
+			},
+			"The day of the month (0) isn't 1 to 28",
+		],
+		[
+			"year 0, a date the game never makes",
+			(p: SaveFile) => {
+				p.SaveGame.year = 0;
+			},
+			"The year (0) is less than 1",
+		],
+		[
+			"snow outside winter",
+			(p: SaveFile) => {
+				p.SaveGame.isSnowing = true;
+			},
+			"It's snowing in spring, and only snows in winter",
+		],
 	])("only warns about %s", (_, breakIt, message) => {
 		const parsed = loadParsed();
 		breakIt(parsed);
 		const result = validateSave(parsed);
 		expect(result.valid).toBe(true);
-		expect(result.warnings.join("\n")).toContain(message);
+		expect(result.warnings).toEqual([message]);
 	});
 
 	it("accepts a Rarecrow wearing a hat, which keeps the hat in its quality", () => {
@@ -313,32 +379,57 @@ describe("validateSave", () => {
 		});
 	});
 
-	it("only warns about snow outside winter", () => {
+	it.each([
+		-102,
+		1.5,
+		2 ** 32,
+		"",
+	])("rejects a stat of %j, which the game can't read back", (value) => {
 		const parsed = loadParsed();
-		parsed.SaveGame.isSnowing = true;
+		daysPlayedStat(parsed.SaveGame.player).value.unsignedInt = value as number;
 		const result = validateSave(parsed);
-		expect(result.valid).toBe(true);
-		expect(result.warnings).toEqual([
-			"It's snowing in spring, and only snows in winter",
+		expect(result.valid).toBe(false);
+		expect(result.errors).toEqual([
+			`Test's daysPlayed stat (${value}) is out of range`,
 		]);
 	});
 
-	it.each([
-		["day 29", { dayOfMonth: 29 }, "The day of the month (29) isn't 1 to 28"],
-		["day 0", { dayOfMonth: 0 }, "The day of the month (0) isn't 1 to 28"],
-		["year 0", { year: 0 }, "The year (0) is less than 1"],
-	])("warns about %s, a date the game never makes", (_, date, message) => {
+	it("accepts the biggest stat the game can hold", () => {
 		const parsed = loadParsed();
-		Object.assign(parsed.SaveGame, date);
-		const result = validateSave(parsed);
-		expect(result.valid).toBe(true);
-		expect(result.warnings).toEqual([message]);
+		daysPlayedStat(parsed.SaveGame.player).value.unsignedInt = 2 ** 32 - 1;
+		expect(validateSave(parsed)).toEqual({
+			valid: true,
+			errors: [],
+			warnings: [],
+		});
 	});
 
-	it("reads the season as the game does, ignoring case", () => {
+	it.each([
+		"Summer",
+		" FALL ",
+		2,
+		"3",
+	])("reads the season %j by name in any case, or by number", (season) => {
 		const parsed = loadParsed();
-		parsed.SaveGame.currentSeason = "Summer" as Season;
-		expect(validateSave(parsed).valid).toBe(true);
+		Object.assign(parsed.SaveGame, { currentSeason: season });
+		expect(validateSave(parsed)).toEqual({
+			valid: true,
+			errors: [],
+			warnings: [],
+		});
+	});
+
+	it("accepts snow in winter", () => {
+		const parsed = loadParsed();
+		Object.assign(parsed.SaveGame, {
+			currentSeason: "winter",
+			isSnowing: true,
+		});
+		expect(validateSave(parsed)).toEqual({
+			valid: true,
+			errors: [],
+			warnings: [],
+		});
 	});
 
 	it("accepts a restored Abandoned Joja Mart (7 rooms)", () => {
