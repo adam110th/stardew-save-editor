@@ -306,7 +306,7 @@ const writeToFile = JSON.stringify(
 		]),
 );
 
-// Overwrite rather than clear the folder: villagers.json comes from `npm run dump:villagers`
+// Overwrite rather than clear the folder: events.json comes from `npm run dump:events`
 await mkdir("./generated", { recursive: true });
 await writeFile("./generated/iteminfo.json", writeToFile);
 

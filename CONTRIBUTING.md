@@ -22,8 +22,8 @@ npm run dev
 ### Updating Game Assets and Data
 
 The editor's game data lives in `generated/` (JSON) and `static/assets/` (textures and portraits).
-Both are committed, so the site builds without the game's files. Three scripts in `codegen/` rebuild
-them; run `npm run format` after any of them.
+Both are committed, so the site builds without the game's files. Two scripts in `codegen/` rebuild
+them; run `npm run format` after either of them.
 
 #### From the game's files: `npm run dump`
 
@@ -35,7 +35,7 @@ Then run `npm run dump`, then `npm run format`.
 `static/assets`, then copies in the sprite sheets listed in `filesToCopy`, a portrait for each villager
 in `src/lib/NPCs.ts`, and the building textures (into `static/assets/buildings`). If you need a
 texture it doesn't copy, add it to `filesToCopy`. It writes everything in `generated/` except
-`villagers.json` and `events.json`:
+`events.json`:
 
 - `iteminfo.json`: every item, from `Data/Objects`, `Data/BigCraftables`, `Data/Boots`, `Data/hats`,
   `Data/Furniture`, `Data/Weapons`, `Data/Tools`, `Data/Shirts`, `Data/Pants`, `Data/Trinkets` and
@@ -56,25 +56,26 @@ texture it doesn't copy, add it to `filesToCopy`. It writes everything in `gener
   editor needs to upgrade it (its `buildingToUpgrade`, `validOccupantTypes`, doors, and the items the
   game adds or moves inside, from `codegen/buildingUpgrade.ts`), from `Data/Buildings`.
 
-#### From the wikis: `npm run dump:villagers` and `npm run dump:events`
+#### From a wiki: `npm run dump:events`
 
-Some text isn't in the game's files, so it comes from the wikis. These two scripts need `curl` (it
-ships with Windows 10+, macOS and Linux; the Stardew Valley Wiki turns away Node's own `fetch`) and an
-internet connection, but not the `content` folder:
+Event names aren't in the game's files, so they come from a wiki. `npm run dump:events`
+(`codegen/events.ts`) writes `generated/events.json`: each event's name, description, location and
+villagers, from the Stardew Modding Wiki's
+[List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs). It needs
+`curl` (it ships with Windows 10+, macOS and Linux) and an internet connection, but not the `content`
+folder.
 
-- `npm run dump:villagers` (`codegen/villagers.ts`) writes `generated/villagers.json`: a description of
-  each villager in `src/lib/NPCs.ts`, from the [Stardew Valley Wiki](https://stardewvalleywiki.com).
-  Loved gifts come from the game's data instead (`npm run dump`).
-- `npm run dump:events` (`codegen/events.ts`) writes `generated/events.json`: each event's name,
-  description, location and villagers, from the Stardew Modding Wiki's
-  [List of Vanilla Event IDs](https://stardewmodding.wiki.gg/wiki/List_of_Vanilla_Event_IDs).
+#### Written by hand
 
-That text keeps the wikis' licences, not this project's: `villagers.json` is
+Villager descriptions aren't in the game's files either: `src/lib/wiki/villagers.json` is copied by
+hand from the intro of each villager's page on the [Stardew Valley Wiki](https://stardewvalleywiki.com),
+so edit it directly. No script fetches it, as the wiki's Cloudflare front end turns scripts away.
+Loved gifts come from the game's data instead (`npm run dump`).
+
+The wiki text keeps the wikis' licences, not this project's: `villagers.json` is
 [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) and `events.json` is
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). LICENSE.md and the credits on the
 Relationships and Events pages say so; keep them up to date if the sources change.
-
-#### Written by hand
 
 The festival dates and weather rules in `src/lib/calendar.ts` aren't generated: they're written from
 `Data/Festivals/FestivalDates`, `Data/PassiveFestivals` and the game's weather code
