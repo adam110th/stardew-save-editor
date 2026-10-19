@@ -45,7 +45,7 @@
 			icon: "📌",
 			reward:
 				"Friendship boost (+2 hearts with all non-marriageable villagers)",
-			note: "Restoring the room puts the villagers' thank-you letter in the mailbox; the hearts are added when it's read in-game.",
+			note: "Restoring the room puts the villagers' thank-you letter in each farmer's mailbox; the hearts are added when it's read in-game.",
 		},
 		[CCRoom.Vault]: {
 			name: "Vault",

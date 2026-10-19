@@ -1,3 +1,4 @@
+import type { Farmer } from "$lib/proxies/Farmer.svelte";
 import type { GameLocation } from "$lib/proxies/GameLocation.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
 import type { SaveProxy } from "$lib/proxies/SaveFile.svelte";
@@ -67,6 +68,69 @@ function applyMail(s: SaveProxy, transform: (mail: Set<MailFlag>) => void) {
 	}
 }
 
+/** Tomorrow's mail, if there is any (an empty list parses as "") */
+const tomorrowsMail = (player: Farmer) => {
+	const list = player[Raw].mailForTomorrow as unknown;
+	if (typeof list !== "object" || !list || !("string" in list)) return;
+	return list as { string: unknown };
+};
+
+const mailForTomorrow = (player: Farmer): string[] => {
+	const list = tomorrowsMail(player);
+	return list ? [list.string].flat().map(String) : [];
+};
+
+/** Whether a letter is this one; tomorrow's mail marks letters that aren't shown */
+const isLetter = (letter: string, id: MailFlag) =>
+	letter === id || letter === `${id}%&NL&%`;
+
+/** Farmer.hasOrWillReceiveMail */
+const hasOrWillReceiveMail = (player: Farmer, id: MailFlag) =>
+	player.mailReceived.has(id) ||
+	player.mailbox.has(id) ||
+	mailForTomorrow(player).some((letter) => isLetter(letter, id));
+
+/**
+	Restoring the Bulletin Board sends the villagers' thank-you letter
+	(CommunityCenter.doAreaCompleteReward); reading it gives +2 hearts with
+	every villager who isn't a marriage candidate, once (LetterViewerMenu,
+	which then sets ccBulletinThankYouReceived).
+*/
+const thankYouLetter: SideEffectPair = {
+	add: (s) => {
+		for (const player of s.players) {
+			if (
+				hasOrWillReceiveMail(player, MailFlag.ccBulletinThankYou) ||
+				player.mailReceived.has(MailFlag.ccBulletinThankYouReceived)
+			)
+				continue;
+			// Into the mailbox rather than tomorrow's mail, so it can be read straight away
+			player.mailbox.add(MailFlag.ccBulletinThankYou);
+		}
+	},
+	remove: (s) => {
+		const letter = MailFlag.ccBulletinThankYou;
+		// Take back the letter if it hasn't been read yet
+		for (const player of s.players) {
+			player.mailbox.delete(letter);
+			const list = tomorrowsMail(player);
+			const letters = mailForTomorrow(player);
+			if (!list || !letters.some((l) => isLetter(l, letter))) continue;
+			list.string = letters.filter((l) => !isLetter(l, letter));
+		}
+	},
+};
+
+/** Run side effects one after the other */
+const both = (...pairs: SideEffectPair[]): SideEffectPair => ({
+	add: (s, cc) => {
+		for (const pair of pairs) pair.add(s, cc);
+	},
+	remove: (s, cc) => {
+		for (const pair of pairs) pair.remove(s, cc);
+	},
+});
+
 function makeEffect(
 	mainFlag: MailFlag,
 	jojaFlag?: MailFlag,
@@ -125,33 +189,10 @@ export const bundleSideEffects = Object.freeze(
 		],
 		[
 			CCRoom.BulletinBoard,
-			(() => {
-				const room = makeEffect(
-					MailFlag.ccBulletin,
-					undefined,
-					CCRoom.BulletinBoard,
-				);
-				return {
-					// The game rewards the Bulletin Board with a thank-you letter; reading
-					// it gives +2 hearts with every non-marriageable villager
-					// (LetterViewerMenu). Put it in the mailbox unless it's already been read.
-					add: (s, cc) => {
-						room.add(s, cc);
-						for (const player of s.players) {
-							const read =
-								player.mailReceived.has(MailFlag.ccBulletinThankYou) ||
-								player.mailReceived.has(MailFlag.ccBulletinThankYouReceived);
-							if (!read) player.mailbox.add(MailFlag.ccBulletinThankYou);
-						}
-					},
-					remove: (s, cc) => {
-						room.remove(s, cc);
-						// Take back the letter if it hasn't been opened yet
-						for (const player of s.players)
-							player.mailbox.delete(MailFlag.ccBulletinThankYou);
-					},
-				};
-			})(),
+			both(
+				makeEffect(MailFlag.ccBulletin, undefined, CCRoom.BulletinBoard),
+				thankYouLetter,
+			),
 		],
 		[
 			CCRoom.AbandonedJojaMart,
@@ -187,7 +228,6 @@ export const bundleSideEffects = Object.freeze(
 				remove: (s) => {
 					applyMail(s, (mail) => {
 						mail.delete(MailFlag.ccIsComplete);
-						mail.delete(MailFlag.ccBulletinThankYou);
 						// If CC is not complete, access should be revoked regardless of route
 						mail.delete(MailFlag.abandonedJojaMartAccessible);
 					});

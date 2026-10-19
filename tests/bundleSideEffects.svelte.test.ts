@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setup as mockIDB } from "vitest-indexeddb";
 import { CCRoom } from "$lib/bundleSideEffects";
 import { Raw } from "$lib/proxies";
+import type { Farmer } from "$lib/proxies/Farmer.svelte";
 import { MailFlag } from "$lib/proxies/Mail.svelte";
+import type { SaveProxy } from "$lib/proxies/SaveFile.svelte";
 import { SaveManager } from "../src/lib/SaveManager.svelte";
 
 describe("bundle side effects - Abandoned JojaMart access", () => {
@@ -358,6 +360,98 @@ describe("bundle side effects - flags the game set without bundles", () => {
 		await tick();
 		for (const player of save.players)
 			expect(player.mailReceived.has(MailFlag.jojaVault)).toBe(false);
+		cleanup();
+	});
+});
+
+describe("bundle side effects - Bulletin Board thank-you letter", () => {
+	mockIDB();
+
+	const letter = MailFlag.ccBulletinThankYou;
+	const mailbox = (player: Farmer) => player[Raw].mailbox.string;
+	const tomorrow = (player: Farmer) =>
+		(player[Raw].mailForTomorrow as unknown as { string?: string[] }).string;
+	const restore = async (
+		bundles: NonNullable<SaveProxy["communityBundles"]>,
+		done: boolean,
+	) => {
+		for (const bundle of bundles.values()) {
+			if (bundle.room !== CCRoom.BulletinBoard) continue;
+			if (done) bundle.complete();
+			else bundle.clear();
+		}
+		flushSync();
+		await tick();
+	};
+
+	it("puts the letter in every farmer's mailbox, and takes it back unread", async () => {
+		const { save, bundles, cleanup } = await loadCoop([], []);
+		for (const player of save.players)
+			expect(mailbox(player)).toEqual(["guildQuest"]);
+
+		await restore(bundles, true);
+		for (const player of save.players) {
+			expect(player.mailReceived.has(MailFlag.ccBulletin)).toBe(true);
+			// Waiting to be read: reading it in-game gives the hearts
+			expect(mailbox(player)).toEqual(["guildQuest", letter]);
+			expect(player.mailReceived.has(letter)).toBe(false);
+		}
+
+		await restore(bundles, false);
+		for (const player of save.players)
+			expect(mailbox(player)).toEqual(["guildQuest"]);
+		cleanup();
+	});
+
+	it("doesn't send it again once read, given, or on its way", async () => {
+		const { save, bundles, cleanup } = await loadCoop(
+			[MailFlag.ccBulletinThankYouReceived],
+			[letter],
+		);
+		await restore(bundles, true);
+		for (const player of save.players)
+			expect(mailbox(player)).toEqual(["guildQuest"]);
+		// Un-restoring the room doesn't forget a letter that was read
+		await restore(bundles, false);
+		expect(save.players[1]?.mailReceived.has(letter)).toBe(true);
+		cleanup();
+
+		const queued = await loadCoop([], []);
+		const [host, hand] = queued.save.players;
+		if (!host || !hand) throw new Error("No farmers");
+		// The game sends it with tomorrow's mail
+		host[Raw].mailForTomorrow = {
+			string: ["Robin", `${letter}%&NL&%`],
+		} as unknown as string;
+		await restore(queued.bundles, true);
+		expect(mailbox(host)).toEqual(["guildQuest"]);
+		expect(mailbox(hand)).toEqual(["guildQuest", letter]);
+
+		// Un-restoring the room takes it back from tomorrow's mail too
+		await restore(queued.bundles, false);
+		expect(tomorrow(host)).toEqual(["Robin"]);
+		expect(mailbox(hand)).toEqual(["guildQuest"]);
+		queued.cleanup();
+	});
+
+	it("doesn't mark the letter as read when the whole Community Center is done or undone", async () => {
+		const { save, bundles, cleanup } = await loadCoop([], [letter]);
+		for (const bundle of bundles.values()) bundle.complete();
+		flushSync();
+		await tick();
+		const [host, hand] = save.players;
+		if (!host || !hand) throw new Error("No farmers");
+		expect(host.mailReceived.has(MailFlag.ccIsComplete)).toBe(true);
+		expect(host.mailReceived.has(letter)).toBe(false);
+		expect(mailbox(host)).toContain(letter);
+
+		// Un-completing it doesn't forget a letter the farmhand read
+		const pantry = [...bundles.values()].find((b) => b.room === CCRoom.Pantry);
+		pantry?.clear();
+		flushSync();
+		await tick();
+		expect(hand.mailReceived.has(MailFlag.ccIsComplete)).toBe(false);
+		expect(hand.mailReceived.has(letter)).toBe(true);
 		cleanup();
 	});
 });
