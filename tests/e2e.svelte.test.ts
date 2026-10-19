@@ -1531,6 +1531,16 @@ describe("Save Manager Integration Tests", () => {
 			return harness.render(chestsPage, { context });
 		};
 
+		const chestIn = (location: string) => {
+			const chests = saveManager.save?.chests ?? [];
+			const index = chests.findIndex(
+				(chest) => chest.metadata.location === location,
+			);
+			const chest = chests[index];
+			if (!chest) throw new Error(`No chest in ${location}`);
+			return { chest, index };
+		};
+
 		it("names each chest slot after its item", () => {
 			const page = renderChests();
 			expectNamedSlots(page.getAllByTestId(/^chest-0-item-\d+$/));
@@ -1668,6 +1678,52 @@ describe("Save Manager Integration Tests", () => {
 			flushSync();
 			await fireEvent.click(page.getByTestId("sort-all-chests"));
 			expect(fridge?.inventory.get(0)).toBe(parsnip);
+		});
+
+		it("dims the items that don't match a search", async () => {
+			const page = renderChests();
+			const chest = saveManager.save?.chests[0];
+			if (!chest) throw new Error("No chest");
+			chest.inventory.set(0, ItemFactory.fromName("Parsnip"));
+			chest.inventory.set(1, ItemFactory.fromName("Stone"));
+			flushSync();
+
+			const search = page.getByTestId("chest-search");
+			await fireEvent.input(search, { target: { value: "parsnip" } });
+			const dimmed = (slot: number) =>
+				page.getByTestId(`chest-0-drag-${slot}`).classList.contains("dimmed");
+			expect(dimmed(0)).toBe(false);
+			expect(dimmed(1)).toBe(true);
+
+			await fireEvent.click(page.getByTestId("chest-search-clear"));
+			expect(dimmed(1)).toBe(false);
+		});
+
+		it("jumps to a search result in another group", async () => {
+			const page = renderChests();
+			const { chest, index } = chestIn("IslandFarmHouse");
+			chest.inventory.set(3, ItemFactory.fromName("Ancient Fruit"));
+			flushSync();
+
+			await fireEvent.input(page.getByTestId("chest-search"), {
+				target: { value: "ancient fruit" },
+			});
+			const result = page.getByTestId(`chest-search-result-${index}-3`);
+			expect(result.textContent).toContain("IslandFarmHouse - Fridge");
+			await fireEvent.click(result);
+			await tick();
+
+			// The island fridges are listed, with the item selected
+			expect((page.getByTestId("chest-group") as HTMLSelectElement).value).toBe(
+				"island-fridges",
+			);
+			expect(page.getAllByTestId("chest-section")).toHaveLength(1);
+			expect(
+				page.getByTestId(`chest-${index}-item-3`).classList.contains("active"),
+			).toBe(true);
+			expect(page.getByText("Editing: IslandFarmHouse - Fridge")).toBeTruthy();
+			// The results close once one is picked
+			expect(page.queryByTestId(`chest-search-result-${index}-3`)).toBeNull();
 		});
 	});
 
