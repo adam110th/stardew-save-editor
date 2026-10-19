@@ -217,6 +217,12 @@ describe("Community Center side effects in a co-op save", () => {
 		spring?.complete();
 		flushSync();
 		await tick();
+		expect(spring?.completed).toBe(true);
+		expect(bought()).toEqual([true, true]);
+
+		spring?.clear();
+		flushSync();
+		await tick();
 		expect(bought()).toEqual([true, true]);
 		cleanup();
 	});
