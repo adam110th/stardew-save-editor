@@ -1093,6 +1093,34 @@ describe("Save Manager Integration Tests", () => {
 			expect(document.activeElement).toBe(input);
 		});
 
+		it("re-sorts when a villager is replaced, not only when the count changes", async () => {
+			const save = saveManager.save;
+			if (!save) throw new Error("No save loaded");
+			const page = harness.render(relationshipsPage);
+			const rows = () => page.getAllByTestId("friendship-row");
+			const names = () =>
+				rows().map(
+					(row) => within(row).getByTestId("friendship-name").textContent,
+				);
+			const before = names();
+			const top = save.player.friendships.get(before[0] ?? "");
+			const last = before.at(-1);
+			if (!top || !last) throw new Error("Expected villagers");
+
+			// Same villagers, but the last one now has the most points
+			const replacement = Friendship.fromName(last);
+			replacement.points = top.points + 1;
+			save.player.friendships.set(last, replacement);
+			flushSync();
+
+			expect(names()).toHaveLength(before.length);
+			expect(names()[0]).toBe(last);
+			const points = within(rows()[0] as HTMLElement).getByTestId(
+				"friendship-points",
+			) as HTMLInputElement;
+			expect(points.value).toBe(String(top.points + 1));
+		});
+
 		it("keeps a villager's name from the save inside its portrait's url()", async () => {
 			const save = saveManager.save;
 			if (!save) throw new Error("No save loaded");
