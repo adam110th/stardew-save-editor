@@ -80,7 +80,8 @@ A web-based save editor for Stardew Valley. Safely edit your save files directly
   - Switch between farmers to edit each one, and drag them into a new order on the Farmhands page
     (the first is the host)
   - Saves are checked on upload, and again before download, for some known problems that would stop
-    the game loading them or crash it
+    the game loading them or crash it. A save with one of those isn't downloaded; anything that's just
+    unusual is shown as a warning
   - A reminder to keep a copy of the game's save before downloading the edited one
   - Automatic save backups in the browser, to download or delete from the Backups page
   - Cross-platform support
