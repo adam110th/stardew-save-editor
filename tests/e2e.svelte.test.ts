@@ -348,6 +348,15 @@ describe("Save Manager Integration Tests", () => {
 			expectNamedSlots(page.getAllByTestId(/^item-\d+$/));
 		});
 
+		it("names empty equipment slots after what goes in them", () => {
+			const page = harness.render(editorPage);
+			const label = (slot: string) =>
+				page.getByTestId(`item-${slot}`).getAttribute("aria-label");
+			expect(label("shirtItem")).toBe("Shirt");
+			expect(label("leftRing")).toBe("Empty left ring slot");
+			expect(label("rightRing")).toBe("Empty right ring slot");
+		});
+
 		it("should create and edit items", async () => {
 			const page = harness.render(editorPage);
 			const slot = page.getByTestId("item-9");
